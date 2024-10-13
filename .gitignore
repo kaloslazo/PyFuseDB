@@ -2,3 +2,6 @@
 .env
 .venv/
 .venv
+
+.gradio/
+__pycache__/

@@ -1,54 +1,22 @@
-import gradio as gr;
+from emoji import emojize
+from termcolor import colored
+from DataLoader import DataLoader
+from SqlParser import SqlParser
+from GradioUI import createDemo
 
-# => General data
-indexRetrievalChoices = ["Implementación Propia", "PostgreSQL", "MongoDB"];
-sampleData = [
-    ["Canción de amor", "Artista 1", 95],
-    ["Melodía nocturna", "Artista 2", 87],
-    ["Ritmo de verano", "Artista 3", 82],
-    ["Balada del viento", "Artista 4", 78],
-    ["Sonata del mar", "Artista 5", 75],
-];
-resultAttributes = ["Título", "Artista", "Relevancia (%)"];
-resultTypes = ["str", "str", "number"];
+def main():
+    print(emojize(f"\n:snake: {colored("PyFuseDB: Sistema de Recuperación de Información", "green")}"))
 
-# => Utility functions
-def updateResults():
-    return sampleData;
+    print(emojize(f"\n:file_cabinet: {colored("Cargando el dataset FMA: A Dataset For Music Analysis", "blue")}"))
+    dataLoader = DataLoader("data/fma_small.csv")
+    dataLoader.loadData()
 
-# => Main interface
-with gr.Blocks(theme=gr.themes.Soft(font=[gr.themes.GoogleFont("Plus Jakarta Sans")], primary_hue="blue")) as demo:
-    gr.Markdown("# PyFuseDB"),
-    gr.Markdown("Sistema avanzado de recuperación de información"),
+    print(emojize(f"\n:brain: {colored("PyFuseDB: Preparando parser SQL", "blue")}"))
+    sqlParser = SqlParser()
 
-    gr.Markdown("## Consulta");
-    with gr.Row():
-        with gr.Column(scale = 2):
-            query_input = gr.Textbox(
-                lines = 5.9,
-                label="Consulta SQL",
-                placeholder="Ingresa tu consulta SQL",
-            );
-        with gr.Column(scale = 1):
-            top_k = gr.Number(label="Top K resultados", value=10);
-            gr.Dropdown(
-                label="Modelo de recuperación",
-                choices = indexRetrievalChoices,
-                value = indexRetrievalChoices[0],
-            );
+    print(emojize(f"\n:rocket: {colored("Inicializando UI", "blue")}"))
+    demo = createDemo(dataLoader, sqlParser)
+    demo.launch()
 
-        executeBtn = gr.Button("Ejecutar consulta", variant="primary");
-
-    gr.Markdown("## Resultados");
-    resultsDataframe = gr.Dataframe(
-        headers=resultAttributes,
-        datatype=resultTypes,
-        label="Resultados de la búsqueda"
-    );
-    executeBtn.click(
-        fn=updateResults,
-        outputs=resultsDataframe
-    );
-
-# => Main entry
-demo.launch();
+if __name__ == '__main__':
+    main()

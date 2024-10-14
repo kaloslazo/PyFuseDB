@@ -5,3 +5,5 @@
 
 .gradio/
 __pycache__/
+app/data/fma/tracks.csv
+app/data/fma/tracks.csv

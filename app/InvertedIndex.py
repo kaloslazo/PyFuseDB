@@ -1,4 +1,5 @@
 import pickle
+import os
 from collections import defaultdict
 import numpy as np
 from TextPreProcess import TextPreProcess
@@ -11,14 +12,21 @@ class InvertedIndex:
         self.block_count = 0
 
         self.preprocessor = TextPreProcess()
+        self.preprocessor.loadStopList()
 
         self.doc_count = 0
         self.document_norms = []
 
 
     def build_index(self, documents):
-        # reset index
-        self.__init__(self.block_size, self.batch_size)
+        if self.block_count > 0:
+            # remove block files
+            for block in range(self.block_count):
+                file_path = f'block_{block}.bin'
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+            # reset index
+            self.__init__(self.block_size, self.batch_size)
 
         print(f"Construyendo índice con {len(documents)} documentos")
         for batch_index in range(0, len(documents), self.batch_size):
@@ -37,20 +45,23 @@ class InvertedIndex:
                 doc_len = 0
                 tokens = self.tokenize(doc)
 
+                # temp dict for term frequencies of currend doc
+                term_freq = defaultdict(int)
                 for token in tokens:
                     doc_len += 1
-                    if doc_id not in self.current_block[token]:
-                        self.current_block[token].append((doc_id, 1))
-                    else:
-                        for (d_id, tf) in self.current_block[token]:
-                            if d_id == doc_id:
-                                tf += 1
-                                break
+                    term_freq[token] += 1
 
+                # update current block with term frequencies
+                for token, tf in term_freq.items():
+                    if token not in self.current_block:
+                        self.current_block[token] = []
+                    self.current_block[token].append((doc_id, tf))
+
+                # write block to disk if it's full
                 if len(self.current_block) >= self.block_size:
                     self.write_block()
 
-            print(f"Procesado lote {batch_index//self.batch_size + 1}/{len(documents)//self.batch_size + 1}")
+            print(f"Procesado lote {batch_index//self.batch_size + 1}/{len(documents)//self.batch_size}")
 
         if self.current_block:
             self.write_block()
@@ -112,7 +123,7 @@ class InvertedIndex:
 
 
     def tokenize(self, text):
-        return self.preprocessor.tokenize(text)
+        return self.preprocessor.processText(text)
 
     def get_tfidf(self, term_freq, doc_freq):
         return np.log10(1 + term_freq) * np.log10(self.doc_count / doc_freq)
@@ -131,3 +142,11 @@ class InvertedIndex:
             pickle.dump(dict(self.current_block), f)
         self.block_count += 1
         self.current_block.clear()
+
+    def debug_blocks(self):
+        print("\n\nDEBUGGING INVERTED INDEX BLOCKS:")
+        for block in range(self.block_count):
+            with open(f'block_{block}.bin', 'rb') as f:
+                block_data = pickle.load(f)
+            print(f"Block {block}: {block_data}")
+        print(f"Document norms: {self.document_norms}")

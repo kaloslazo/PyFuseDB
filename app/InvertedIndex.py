@@ -16,6 +16,8 @@ class InvertedIndex:
         self.dict_count = 0
         self.doc_count = 0
         self.document_norms = []
+        self.count_output = 0
+        self.output = defaultdict()
 
         self.preprocessor = TextPreProcess()
         self.preprocessor.loadStopList()
@@ -51,20 +53,20 @@ class InvertedIndex:
 
                 # Si el diccionario en memoria está lleno
                 if len(self.current_block) >= self.dict_size:
+                    #print("????????????????",len(self.current_block))
+                    #print("????????????????",len(self.dict_keyPointer))
                     self.flush_all_terms()
 
         # Flush final de términos pendientes
         if self.current_block:
             self.flush_all_terms()
 
-        # merge blocks
-
-
+        # Merge de bloques
+        self.merge_blocks()
 
         #Calcular normas de documentos
         self.calculate_document_norms()
         self.save_norms()
-
 
 
     def search(self, query, top_k: int = 10):
@@ -101,8 +103,110 @@ class InvertedIndex:
         print(f"Número de resultados encontrados: {len(scores)}")
         return scores[:top_k]
     
+    def merge_lotes(self, P, Q, size):
+        i = 0
+        j = 0
+        p = P
+        q = Q
+
+        # Leer diccionarios iniciales de p y q
+        dict1 = self.read_dict(p)
+        keys1 = list(dict1.keys())
+        dict2 = self.read_dict(q) if Q < self.dict_count else {}
+        keys2 = list(dict2.keys()) if dict2 else []
+
+        # Bucle principal de mezcla
+        while p < P + size and q < min(Q + size, self.dict_count) and i < len(keys1) and j < len(keys2):
+            if keys1[i] == keys2[j]:
+                if dict1[keys1[i]][0] > dict2[keys2[j]][0]:
+                    self.output[keys1[i]] = dict1[keys1[i]]
+                    self.concatenate_postings(self.output[keys1[i]][1], dict2[keys2[j]][1])
+                    self.output[keys1[i]][0] += dict2[keys2[j]][0]
+                else:
+                    self.output[keys2[j]] = dict2[keys2[j]]
+                    self.concatenate_postings(self.output[keys2[j]][1], dict1[keys1[i]][1])
+                    self.output[keys2[j]][0] += dict1[keys1[i]][0]
+                i += 1
+                j += 1
+            elif keys1[i] < keys2[j]:
+                self.output[keys1[i]] = dict1[keys1[i]]
+                i += 1
+            else:
+                self.output[keys2[j]] = dict2[keys2[j]]
+                j += 1
+
+            # Reiniciar y leer nuevos bloques si es necesario
+            if i == len(keys1) and p + 1 < P + size:
+                p += 1
+                dict1 = self.read_dict(p)
+                keys1 = list(dict1.keys())
+                i = 0
+
+            if j == len(keys2) and q + 1 < min(Q + size, self.dict_count):
+                q += 1
+                dict2 = self.read_dict(q)
+                keys2 = list(dict2.keys())
+                j = 0
+
+            # Escribir output al alcanzar el tamaño del diccionario
+            if len(self.output) >= self.dict_size:
+                self.write_temp_dict()
+                self.output = defaultdict()
+
+        # Procesar elementos restantes de la izquierda
+        while p < P + size and i < len(keys1):
+            self.output[keys1[i]] = dict1[keys1[i]]
+            i += 1
+            if i == len(keys1) and p + 1 < P + size:
+                p += 1
+                dict1 = self.read_dict(p)
+                keys1 = list(dict1.keys())
+                i = 0
+            if len(self.output) >= self.dict_size:
+                self.write_temp_dict()
+                self.output = defaultdict()
+
+        # Procesar elementos restantes de la derecha
+        while q < min(Q + size, self.dict_count) and j < len(keys2):
+            self.output[keys2[j]] = dict2[keys2[j]]
+            j += 1
+            if j == len(keys2) and q + 1 < min(Q + size, self.dict_count):
+                q += 1
+                dict2 = self.read_dict(q)
+                keys2 = list(dict2.keys())
+                j = 0
+            if len(self.output) >= self.dict_size:
+                self.write_temp_dict()
+                self.output = defaultdict()
+        
+        # Escribir output restante
+        if self.output:
+            self.write_temp_dict()
+            self.output = defaultdict()
 
 
+
+    def merge_blocks(self):
+        print("Combinando bloques...")
+        size = 1
+        while size < self.dict_count:
+            for i in range(0, self.dict_count, 2*size):
+                self.merge_lotes(i, i+size, size)
+            
+
+            # eliminar diccionarios antiguos
+            for i in range(0, self.dict_count):
+                os.remove(f'dict_{i}.bin')
+            
+            # renombrar diccionarios temporales
+            for i in range(self.count_output):
+                os.rename(f'dict_temp_{i}.bin', f'dict_{i}.bin')
+            self.dict_count = self.count_output
+            self.count_output = 0
+
+            size *= 2
+
+    
     def flush_term(self, token):
         """Escribe un término específico a disco"""
         postings = self.current_block[token]
@@ -139,15 +243,17 @@ class InvertedIndex:
         self.dict_keyPointer[token][0] += len(postings)
             
         self.block_count += 1
-        del self.current_block[token]
+        self.current_block[token] = []  # Limpiar el bloque actual
 
     def flush_all_terms(self):
         # Hacer flush de los términos
+        print("edrftgyhu7yhgtrfwsaz", len(self.dict_keyPointer))        
         for token in list(self.current_block.keys()):
             self.flush_term(token)
         
         # Escribir diccionario ordenado
         dict_file = f'dict_{self.dict_count}.bin'
+        print("edrftgyhu7yhgtrfwsaz", len(self.dict_keyPointer))
         with open(dict_file, 'wb') as f:
             pickle.dump(dict(sorted(self.dict_keyPointer.items())), f)
         
@@ -165,7 +271,34 @@ class InvertedIndex:
         with open(f'block_{block_num}.bin', 'wb') as f:
             pickle.dump(block_data, f)
 
-    
+    def concatenate_postings(self, bucketNum1, bucketNum2):
+        print(f"Concatenando {bucketNum1} y {bucketNum2}")
+        bucket1 = self.read_block(bucketNum1)
+        bucket2 = self.read_block(bucketNum2)
+
+        current_pointer = bucketNum1
+        while bucket1['next_block'] != -1:
+            current_pointer = bucket1['next_block']
+            bucket1 = self.read_block(current_pointer)
+
+        bucket1['next_block'] = bucketNum2
+        self.write_block(current_pointer, bucket1) 
+
+    def write_temp_dict(self):
+        #Escribe un diccionario temporal al disco
+        dict_file = f'dict_temp_{self.count_output}.bin'
+        with open(dict_file, 'wb') as f:
+            pickle.dump(dict(self.output.items()), f)
+        self.output.clear()
+        self.count_output += 1
+        
+
+
+    def read_dict(self, dict_num):
+        #Lee un diccionario específico del disco
+        with open(f'dict_{dict_num}.bin', 'rb') as f:
+            return pickle.load(f)
+
     def tokenize(self, text):
         return self.preprocessor.processText(text)
 
@@ -190,10 +323,8 @@ class InvertedIndex:
         self.document_norms = np.sqrt(self.document_norms)
 
 
-
-
     def get_tfidf(self, term_freq, doc_freq):
-        print(f"Term freq: {term_freq}, Doc freq: {doc_freq}")
+        #print(f"Term freq: {term_freq}, Doc freq: {doc_freq}")
         if term_freq > 0:
             x = np.log10(1 + term_freq)
         else:
@@ -221,6 +352,7 @@ class InvertedIndex:
         for block in range(self.dict_count):
             with open(f'dict_{block}.bin', 'rb') as f:
                 dict_data = pickle.load(f)
+            print(f"Len_Dict {block}: {len(dict_data)}")
             print(f"Dict {block}: {dict_data}")
 
         #print(f"Document norms: {self.document_norms}")

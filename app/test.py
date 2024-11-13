@@ -4,7 +4,7 @@ import nltk
 
 index = InvertedIndex(block_size=2, dict_size=20)
 documents = [
-    "Spring is a season of renewal and fresh beginnings.",
+    "Spring is a season of renewal spring and fresh beginnings.",
     "Flowers bloom in abundance during the spring season.",
     "In spring, the days grow longer, and the weather becomes warmer.",
     "Spring brings colorful flowers and fresh green leaves on trees.",
@@ -25,3 +25,7 @@ for doc in documents:
 # Testeando la construcción del índice invertido
 index.build_index(documents)
 index.debug_blocks()
+
+# Test de las normas
+index.load_norms() 
+print(index.document_norms)

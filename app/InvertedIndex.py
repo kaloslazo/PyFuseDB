@@ -63,7 +63,7 @@ class InvertedIndex:
             self.flush_all_terms()
 
         # Merge de bloques
-        self.merge_blocks_old()
+        self.merge_blocks()
 
         #Calcular normas de documentos
         self.calculate_document_norms()
@@ -200,33 +200,6 @@ class InvertedIndex:
 
 
     def merge_blocks(self):
-        print("Antes de combinar bloques:")
-        self.debug_blocks()
-        print("Combinando bloques...")
-        print("Número de diccionarios:", self.dict_count)
-        size = 1
-        while size < self.dict_count:
-            print(f"Combinando lotes de tamaño {size}")
-            for i in range(0, self.dict_count, 2*size):
-                print(f"Combinando lotes {i} y {i+size}")
-                self.merge_lotes(i, i+size, size)
-            
-
-            # eliminar diccionarios antiguos
-            for i in range(0, self.dict_count):
-                os.remove(f'dict_{i}.bin')
-            
-            # renombrar diccionarios temporales
-            for i in range(self.count_output):
-                os.rename(f'dict_temp_{i}.bin', f'dict_{i}.bin')
-            self.dict_count = self.count_output
-            self.count_output = 0
-
-            self.debug_blocks()
-
-            size *= 2
-
-    def merge_blocks_old(self):
         listParameters = []
         for i in range(0, self.dict_count, 2):
             listParameters.append([i, i+1, 1, 1])
@@ -351,7 +324,6 @@ class InvertedIndex:
         self.count_output += 1
         
 
-
     def read_dict(self, dict_num):
         #Lee un diccionario específico del disco
         with open(f'dict_{dict_num}.bin', 'rb') as f:
@@ -359,7 +331,6 @@ class InvertedIndex:
 
     def tokenize(self, text):
         return self.preprocessor.processText(text)
-
 
     def calculate_document_norms(self):
         #Calcula la norma de cada documento

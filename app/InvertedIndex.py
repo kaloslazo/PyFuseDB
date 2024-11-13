@@ -18,6 +18,7 @@ class InvertedIndex:
         self.document_norms = []
         self.count_output = 0
         self.output = defaultdict()
+        self.newListParameters = []
 
         self.preprocessor = TextPreProcess()
         self.preprocessor.loadStopList()
@@ -62,7 +63,7 @@ class InvertedIndex:
             self.flush_all_terms()
 
         # Merge de bloques
-        self.merge_blocks()
+        self.merge_blocks_old()
 
         #Calcular normas de documentos
         self.calculate_document_norms()
@@ -103,7 +104,7 @@ class InvertedIndex:
         print(f"Número de resultados encontrados: {len(scores)}")
         return scores[:top_k]
     
-    def merge_lotes(self, P, Q, size):
+    def merge_lotes(self, P, Q, PSIZE, QSIZE):
         i = 0
         j = 0
         p = P
@@ -113,10 +114,12 @@ class InvertedIndex:
         dict1 = self.read_dict(p)
         keys1 = list(dict1.keys())
         dict2 = self.read_dict(q) if Q < self.dict_count else {}
+        
         keys2 = list(dict2.keys()) if dict2 else []
 
+        initial_count = self.count_output
         # Bucle principal de mezcla
-        while p < P + size and q < min(Q + size, self.dict_count) and i < len(keys1) and j < len(keys2):
+        while p < min(P + PSIZE, self.dict_count) and q < min(Q + PSIZE, self.dict_count) and i < len(keys1) and j < len(keys2):
             if keys1[i] == keys2[j]:
                 if dict1[keys1[i]][0] > dict2[keys2[j]][0]:
                     self.output[keys1[i]] = dict1[keys1[i]]
@@ -136,13 +139,13 @@ class InvertedIndex:
                 j += 1
 
             # Reiniciar y leer nuevos bloques si es necesario
-            if i == len(keys1) and p + 1 < P + size:
+            if i == len(keys1) and p + 1 < min(P + PSIZE, self.dict_count):
                 p += 1
                 dict1 = self.read_dict(p)
                 keys1 = list(dict1.keys())
                 i = 0
 
-            if j == len(keys2) and q + 1 < min(Q + size, self.dict_count):
+            if j == len(keys2) and q + 1 < min(Q + QSIZE, self.dict_count):
                 q += 1
                 dict2 = self.read_dict(q)
                 keys2 = list(dict2.keys())
@@ -154,10 +157,10 @@ class InvertedIndex:
                 self.output = defaultdict()
 
         # Procesar elementos restantes de la izquierda
-        while p < P + size and i < len(keys1):
+        while p < min(P + PSIZE, self.dict_count) and i < len(keys1):
             self.output[keys1[i]] = dict1[keys1[i]]
             i += 1
-            if i == len(keys1) and p + 1 < P + size:
+            if i == len(keys1) and p + 1 < min(P + PSIZE, self.dict_count):
                 p += 1
                 dict1 = self.read_dict(p)
                 keys1 = list(dict1.keys())
@@ -167,10 +170,10 @@ class InvertedIndex:
                 self.output = defaultdict()
 
         # Procesar elementos restantes de la derecha
-        while q < min(Q + size, self.dict_count) and j < len(keys2):
+        while q < min(Q + QSIZE, self.dict_count) and j < len(keys2):
             self.output[keys2[j]] = dict2[keys2[j]]
             j += 1
-            if j == len(keys2) and q + 1 < min(Q + size, self.dict_count):
+            if j == len(keys2) and q + 1 < min(Q + QSIZE, self.dict_count):
                 q += 1
                 dict2 = self.read_dict(q)
                 keys2 = list(dict2.keys())
@@ -185,12 +188,27 @@ class InvertedIndex:
             self.output = defaultdict()
 
 
+        # actualizar newListParameters
+        salto = self.count_output - initial_count
+        if len(self.newListParameters) == 0: #vacia
+            self.newListParameters.append([initial_count, None, salto, None])
+        elif self.newListParameters[-1][0]!=None and self.newListParameters[-1][1] != None: #ultima llena
+            self.newListParameters.append([initial_count, None, salto, None])
+        elif self.newListParameters[-1][0] != None and self.newListParameters[-1][1] == None: #ultima semi llena
+            self.newListParameters[-1][1] = initial_count
+            self.newListParameters[-1][3] = salto
+
 
     def merge_blocks(self):
+        print("Antes de combinar bloques:")
+        self.debug_blocks()
         print("Combinando bloques...")
+        print("Número de diccionarios:", self.dict_count)
         size = 1
         while size < self.dict_count:
+            print(f"Combinando lotes de tamaño {size}")
             for i in range(0, self.dict_count, 2*size):
+                print(f"Combinando lotes {i} y {i+size}")
                 self.merge_lotes(i, i+size, size)
             
 
@@ -204,56 +222,96 @@ class InvertedIndex:
             self.dict_count = self.count_output
             self.count_output = 0
 
+            self.debug_blocks()
+
             size *= 2
+
+    def merge_blocks_old(self):
+        listParameters = []
+        for i in range(0, self.dict_count, 2):
+            listParameters.append([i, i+1, 1, 1])
+        
+        print ("Antes de combinar bloques:")
+        self.debug_blocks()
+        print("Combinando bloques...")
+        while (True):
+            self.newListParameters = []
+            for a, b, aSize, bSize in listParameters:
+                self.merge_lotes(a, b, aSize, bSize)
+
+            # asegurar que el último lote se cierre
+            if self.newListParameters[-1][1] == None:
+                self.newListParameters[-1][1] = self.count_output
+                self.newListParameters[-1][3] = self.count_output + 1
+
+            listParameters = self.newListParameters
+
+            # eliminar diccionarios antiguos
+            for i in range(0, self.dict_count):
+                os.remove(f'dict_{i}.bin')
+            
+            # renombrar diccionarios temporales
+            for i in range(self.count_output):
+                os.rename(f'dict_temp_{i}.bin', f'dict_{i}.bin')
+            self.dict_count = self.count_output
+            self.count_output = 0
+
+            self.debug_blocks()
+            #print("ListParameters:", listParameters)
+            #input("Press Enter to continue...")
+
+            if len(listParameters) == 1 and listParameters[0][1] == self.dict_count:
+                break
 
     
     def flush_term(self, token):
         """Escribe un término específico a disco"""
         postings = self.current_block[token]
         
-        # Crear nuevo bloque
-        block_data = {
-            'postings': postings,
-            'next_block': -1  # -1 indica que es el último bloque
-        }
-        
-        # Escribir bloque
-        block_file = f'block_{self.block_count}.bin'
-        with open(block_file, 'wb') as f:
-            pickle.dump(block_data, f)
+        if len(postings) > 0:
+            # Crear nuevo bloque
+            block_data = {
+                'postings': postings,
+                'next_block': -1  # -1 indica que es el último bloque
+            }
             
-        # Actualizar punteros
-        if token in self.dict_keyPointer:
-            # Actualizar el puntero del bloque anterior
-                current_pointer = self.dict_keyPointer[token][1]
-                prev_block = self.read_block(current_pointer)
+            # Escribir bloque
+            block_file = f'block_{self.block_count}.bin'
+            with open(block_file, 'wb') as f:
+                pickle.dump(block_data, f)
                 
-                # Navegar hasta el último bloque
-                while prev_block['next_block'] != -1:
-                    current_pointer = prev_block['next_block']
+            # Actualizar punteros
+            if token in self.dict_keyPointer:
+                # Actualizar el puntero del bloque anterior
+                    current_pointer = self.dict_keyPointer[token][1]
                     prev_block = self.read_block(current_pointer)
+                    
+                    # Navegar hasta el último bloque
+                    while prev_block['next_block'] != -1:
+                        current_pointer = prev_block['next_block']
+                        prev_block = self.read_block(current_pointer)
 
-                # Actualizar el puntero del último bloque al nuevo bloque
-                prev_block['next_block'] = self.block_count
-                self.write_block(current_pointer, prev_block) 
-        else:
-            # Nuevo término
-            self.dict_keyPointer[token][1] = self.block_count
-        
-        self.dict_keyPointer[token][0] += len(postings)
+                    # Actualizar el puntero del último bloque al nuevo bloque
+                    prev_block['next_block'] = self.block_count
+                    self.write_block(current_pointer, prev_block) 
+            else:
+                # Nuevo término
+                self.dict_keyPointer[token][1] = self.block_count
             
-        self.block_count += 1
-        self.current_block[token] = []  # Limpiar el bloque actual
+            self.dict_keyPointer[token][0] += len(postings)
+                
+            self.block_count += 1
+            self.current_block[token] = []  # Limpiar el bloque actual
 
     def flush_all_terms(self):
         # Hacer flush de los términos
-        print("edrftgyhu7yhgtrfwsaz", len(self.dict_keyPointer))        
+        #print("edrftgyhu7yhgtrfwsaz", len(self.dict_keyPointer))        
         for token in list(self.current_block.keys()):
             self.flush_term(token)
         
         # Escribir diccionario ordenado
         dict_file = f'dict_{self.dict_count}.bin'
-        print("edrftgyhu7yhgtrfwsaz", len(self.dict_keyPointer))
+        #print("edrftgyhu7yhgtrfwsaz", len(self.dict_keyPointer))
         with open(dict_file, 'wb') as f:
             pickle.dump(dict(sorted(self.dict_keyPointer.items())), f)
         
@@ -272,7 +330,7 @@ class InvertedIndex:
             pickle.dump(block_data, f)
 
     def concatenate_postings(self, bucketNum1, bucketNum2):
-        print(f"Concatenando {bucketNum1} y {bucketNum2}")
+        #print(f"Concatenando {bucketNum1} y {bucketNum2}")
         bucket1 = self.read_block(bucketNum1)
         bucket2 = self.read_block(bucketNum2)
 
@@ -343,11 +401,13 @@ class InvertedIndex:
 
     def debug_blocks(self):
         print("\n\nDEBUGGING INVERTED INDEX BLOCKS:")
+        
         print("Buckets:")
         for block in range(self.block_count):
             with open(f'block_{block}.bin', 'rb') as f:
                 block_data = pickle.load(f)
             print(f"Block {block}: {block_data}")
+        
         print("\nDictionary:")
         for block in range(self.dict_count):
             with open(f'dict_{block}.bin', 'rb') as f:

@@ -36,7 +36,7 @@ documents = [
     "In many cultures, spring is a time for festivals celebrating new life."
 ]
 
-documents1 = [
+documents = [
     "Spring is a season of renewal spring and fresh beginnings.",
     "Flowers bloom in abundance during the spring season.",
     "In spring, the days grow longer, and the weather becomes warmer.",
@@ -57,7 +57,7 @@ for doc in documents:
 
 # Testeando la construcción del índice invertido
 index.build_index(documents)
-index.debug_blocks()
+
 
 # Test de las normas
 index.load_norms()

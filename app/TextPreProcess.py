@@ -8,7 +8,7 @@ nltk.download('punkt_tab')
 
 class TextPreProcess:
     def __init__(self):
-        self.stopListPath = "./app/data/stopList.txt"
+        self.stopListPath = "./data/stopList.txt"
         self.stemmer = SnowballStemmer("english")
         self.stopList = set()  # Change 6: Using a set for faster lookup
         print("TextPreProcess initialized.")

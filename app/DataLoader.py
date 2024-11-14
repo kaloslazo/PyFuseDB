@@ -16,13 +16,11 @@ class DataLoader:
         try:
             self.data = pd.read_csv(self.dataPath)
             print(f"Dataset cargado exitosamente.\nColumnas: {self.data.columns}\nFilas: {len(self.data)}")
-
+            
             print("Construyendo índice invertido...")
-            for index, row in tqdm(self.data.iterrows(), total=len(self.data), desc="Procesando documentos"):
-                self.index.add_document(index, str(row["texto_concatenado"]))
-
-            print("Calculando TF-IDF...")
+            # Aquí está el cambio principal - usamos build_index directamente
             self.index.build_index(self.data["texto_concatenado"].astype(str).tolist())
+            
             print("Índice invertido construido exitosamente.")
         except Exception as e:
             print(f"Error durante la carga de datos: {str(e)}")

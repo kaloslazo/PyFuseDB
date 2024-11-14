@@ -3,6 +3,8 @@
 .venv/
 .venv
 
+*.bin
+
 .gradio/
 __pycache__/
 app/data/fma/tracks.csv

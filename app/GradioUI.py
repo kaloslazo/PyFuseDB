@@ -50,9 +50,9 @@ def createDemo(dataLoader=dataLoader, sqlParser=sqlParser):
             traceback.print_exc()
             raise gr.Error(f"Error: {str(e)}")
 
-    with gr.Blocks(theme=gr.themes.Soft(font=[gr.themes.GoogleFont("Plus Jakarta Sans")], primary_hue="blue")) as demo:
+    with gr.Blocks(title="🐍 PyFuseDB" ,theme=gr.themes.Soft(font=[gr.themes.GoogleFont("Plus Jakarta Sans")], primary_hue="green")) as demo:
         with gr.Column(scale=1):
-            gr.Markdown("# PyFuseDB", elem_classes="header")
+            gr.Markdown("# 🐍 PyFuseDB", elem_classes="header")
             gr.Markdown("Sistema que integra varios modelos de datos y técnicas avanzadas de recuperación de información.", elem_classes="subtitle")
             
             with gr.Tab("Parte 1: Índice Invertido"):

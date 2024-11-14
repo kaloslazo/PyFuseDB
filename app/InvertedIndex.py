@@ -27,12 +27,12 @@ class InvertedIndex:
 
         print(f"Construyendo índice con {len(documents)} documentos")
         self.doc_count = len(documents)
-        
+
         for doc_id, document in enumerate(documents):
             # Procesar documento
             tokens = self.tokenize(document)
             term_freq = defaultdict(int)
-            
+
             # Contar frecuencias
             for token in tokens:
                 term_freq[token] += 1
@@ -40,15 +40,15 @@ class InvertedIndex:
             # Actualizar el índice
             for token, tf in term_freq.items():
                 self.current_block[token].append((doc_id, tf))
-                
+
                 # Si el bloque actual para este término está lleno
                 if len(self.current_block[token]) >= self.block_size:
                     self.flush_term(token)
 
                 # Si el diccionario en memoria está lleno
                 if len(self.current_block) >= self.dict_size:
-                    #print("????????????????",len(self.current_block))
-                    #print("????????????????",len(self.dict_keyPointer))
+                    # print("????????????????",len(self.current_block))
+                    # print("????????????????",len(self.dict_keyPointer))
                     self.flush_all_terms()
 
         # Flush final de términos pendientes
@@ -61,6 +61,52 @@ class InvertedIndex:
         # Calcular normas de documentos
         self.calculate_document_norms()
         self.save_norms()
+
+    def binary_search(self, keys, term):
+        low, high = 0, len(keys) - 1
+        while low <= high:
+            mid = (low + high) // 2
+            if keys[mid] == term:
+                return mid
+            elif term < keys[mid]:
+                high = mid - 1
+            else:
+                low = mid + 1
+        return None
+
+    def find_postings_list(self, term):
+        low = 0
+        high = self.dict_count - 1
+
+        while low <= high:
+            mid = (low + high) // 2
+            dictionary = self.read_dict(mid)
+
+            keys = dictionary.keys()
+
+            index = self.binary_search(keys, term)
+
+            if index is not None:
+                doc_freq, block_num = dictionary[term]
+
+                postings_list = []
+                while True:
+                    block_data = self.read_block(block_num)
+                    postings_list.extend(block_data["postings"])
+
+                    if block_data["next_block"] == -1:
+                        break
+
+                    block_num = block_data["next_block"]
+
+                return postings_list
+
+            if term < keys[0]:
+                high = mid - 1
+            else:
+                low = mid + 1
+
+        return []
 
 
     def search(self, query, top_k: int = 10):
@@ -99,12 +145,11 @@ class InvertedIndex:
             for doc_id in scores.keys():
                 scores[doc_id] /= (self.document_norms[doc_id] * query_norm)
 
-
         scores = sorted(scores.items(), key=lambda item: item[1], reverse=True)
         print(f"Número de resultados encontrados: {len(scores)}")
         return scores[:top_k]
 
-    
+
     def fetch_postings_list(self, term):
         low = 0
         high = self.dict_count - 1
@@ -151,20 +196,29 @@ class InvertedIndex:
         dict1 = self.read_dict(p)
         keys1 = list(dict1.keys())
         dict2 = self.read_dict(q) if Q < self.dict_count else {}
-        
+
         keys2 = list(dict2.keys()) if dict2 else []
 
         initial_count = self.count_output
         # Bucle principal de mezcla
-        while p < min(P + PSIZE, self.dict_count) and q < min(Q + PSIZE, self.dict_count) and i < len(keys1) and j < len(keys2):
+        while (
+            p < min(P + PSIZE, self.dict_count)
+            and q < min(Q + PSIZE, self.dict_count)
+            and i < len(keys1)
+            and j < len(keys2)
+        ):
             if keys1[i] == keys2[j]:
                 if dict1[keys1[i]][0] > dict2[keys2[j]][0]:
                     self.output[keys1[i]] = dict1[keys1[i]]
-                    self.concatenate_postings(self.output[keys1[i]][1], dict2[keys2[j]][1])
+                    self.concatenate_postings(
+                        self.output[keys1[i]][1], dict2[keys2[j]][1]
+                    )
                     self.output[keys1[i]][0] += dict2[keys2[j]][0]
                 else:
                     self.output[keys2[j]] = dict2[keys2[j]]
-                    self.concatenate_postings(self.output[keys2[j]][1], dict1[keys1[i]][1])
+                    self.concatenate_postings(
+                        self.output[keys2[j]][1], dict1[keys1[i]][1]
+                    )
                     self.output[keys2[j]][0] += dict1[keys1[i]][0]
                 i += 1
                 j += 1
@@ -218,33 +272,38 @@ class InvertedIndex:
             if len(self.output) >= self.dict_size:
                 self.write_temp_dict()
                 self.output = defaultdict()
-        
+
         # Escribir output restante
         if self.output:
             self.write_temp_dict()
             self.output = defaultdict()
 
-
         # actualizar newListParameters
         salto = self.count_output - initial_count
-        if len(self.newListParameters) == 0: #vacia
+        if len(self.newListParameters) == 0:  # vacia
             self.newListParameters.append([initial_count, None, salto, None])
-        elif self.newListParameters[-1][0] is not None and self.newListParameters[-1][1] is not None: #ultima llena
+
+        elif (
+            self.newListParameters[-1][0] != None
+            and self.newListParameters[-1][1] != None
+        ):  # ultima llena
             self.newListParameters.append([initial_count, None, salto, None])
-        elif self.newListParameters[-1][0] is not None and self.newListParameters[-1][1] is None: #ultima semi llena
+        elif (
+            self.newListParameters[-1][0] != None
+            and self.newListParameters[-1][1] == None
+        ):  # ultima semi llena
             self.newListParameters[-1][1] = initial_count
             self.newListParameters[-1][3] = salto
-
 
     def merge_blocks(self):
         listParameters = []
         for i in range(0, self.dict_count, 2):
-            listParameters.append([i, i+1, 1, 1])
-        
-        print ("Antes de combinar bloques:")
+            listParameters.append([i, i + 1, 1, 1])
+
+        print("Antes de combinar bloques:")
         self.debug_blocks()
         print("Combinando bloques...")
-        while (True):
+        while True:
             self.newListParameters = []
             for a, b, aSize, bSize in listParameters:
                 self.merge_lotes(a, b, aSize, bSize)
@@ -258,138 +317,135 @@ class InvertedIndex:
 
             # eliminar diccionarios antiguos
             for i in range(0, self.dict_count):
-                os.remove(f'dict_{i}.bin')
-            
+                os.remove(f"dict_{i}.bin")
+
             # renombrar diccionarios temporales
             for i in range(self.count_output):
-                os.rename(f'dict_temp_{i}.bin', f'dict_{i}.bin')
+                os.rename(f"dict_temp_{i}.bin", f"dict_{i}.bin")
             self.dict_count = self.count_output
             self.count_output = 0
 
             self.debug_blocks()
-            #print("ListParameters:", listParameters)
-            #input("Press Enter to continue...")
+            # print("ListParameters:", listParameters)
+            # input("Press Enter to continue...")
 
             if len(listParameters) == 1 and listParameters[0][1] == self.dict_count:
                 break
 
-    
     def flush_term(self, token):
         """Escribe un término específico a disco"""
         postings = self.current_block[token]
-        
+
         if len(postings) > 0:
             # Crear nuevo bloque
             block_data = {
-                'postings': postings,
-                'next_block': -1  # -1 indica que es el último bloque
+                "postings": postings,
+                "next_block": -1,  # -1 indica que es el último bloque
             }
-            
+
             # Escribir bloque
-            block_file = f'block_{self.block_count}.bin'
-            with open(block_file, 'wb') as f:
+            block_file = f"block_{self.block_count}.bin"
+            with open(block_file, "wb") as f:
                 pickle.dump(block_data, f)
-                
+
             # Actualizar punteros
             if token in self.dict_keyPointer:
                 # Actualizar el puntero del bloque anterior
-                    current_pointer = self.dict_keyPointer[token][1]
-                    prev_block = self.read_block(current_pointer)
-                    
-                    # Navegar hasta el último bloque
-                    while prev_block['next_block'] != -1:
-                        current_pointer = prev_block['next_block']
-                        prev_block = self.read_block(current_pointer)
+                current_pointer = self.dict_keyPointer[token][1]
+                prev_block = self.read_block(current_pointer)
 
-                    # Actualizar el puntero del último bloque al nuevo bloque
-                    prev_block['next_block'] = self.block_count
-                    self.write_block(current_pointer, prev_block) 
+                # Navegar hasta el último bloque
+                while prev_block["next_block"] != -1:
+                    current_pointer = prev_block["next_block"]
+                    prev_block = self.read_block(current_pointer)
+
+                # Actualizar el puntero del último bloque al nuevo bloque
+                prev_block["next_block"] = self.block_count
+                self.write_block(current_pointer, prev_block)
             else:
                 # Nuevo término
                 self.dict_keyPointer[token][1] = self.block_count
-            
+
             self.dict_keyPointer[token][0] += len(postings)
-                
+
             self.block_count += 1
             self.current_block[token] = []  # Limpiar el bloque actual
 
     def flush_all_terms(self):
         # Hacer flush de los términos
-        #print("edrftgyhu7yhgtrfwsaz", len(self.dict_keyPointer))        
+        # print("edrftgyhu7yhgtrfwsaz", len(self.dict_keyPointer))
         for token in list(self.current_block.keys()):
             self.flush_term(token)
-        
+
         # Escribir diccionario ordenado
-        dict_file = f'dict_{self.dict_count}.bin'
-        #print("edrftgyhu7yhgtrfwsaz", len(self.dict_keyPointer))
-        with open(dict_file, 'wb') as f:
+        dict_file = f"dict_{self.dict_count}.bin"
+        # print("edrftgyhu7yhgtrfwsaz", len(self.dict_keyPointer))
+        with open(dict_file, "wb") as f:
             pickle.dump(dict(sorted(self.dict_keyPointer.items())), f)
-        
+
         self.dict_count += 1
         self.dict_keyPointer.clear()
         self.current_block.clear()  # Limpiar el bloque actual
 
     def read_block(self, block_num):
-        #Lee un bloque específico del disco
-        with open(f'block_{block_num}.bin', 'rb') as f:
+        # Lee un bloque específico del disco
+        with open(f"block_{block_num}.bin", "rb") as f:
             return pickle.load(f)
 
     def write_block(self, block_num, block_data):
-        #Escribe un bloque específico al disco
-        with open(f'block_{block_num}.bin', 'wb') as f:
+        # Escribe un bloque específico al disco
+        with open(f"block_{block_num}.bin", "wb") as f:
             pickle.dump(block_data, f)
 
     def concatenate_postings(self, bucketNum1, bucketNum2):
-        #print(f"Concatenando {bucketNum1} y {bucketNum2}")
+        # print(f"Concatenando {bucketNum1} y {bucketNum2}")
         bucket1 = self.read_block(bucketNum1)
 
         current_pointer = bucketNum1
-        while bucket1['next_block'] != -1:
-            current_pointer = bucket1['next_block']
+        while bucket1["next_block"] != -1:
+            current_pointer = bucket1["next_block"]
             bucket1 = self.read_block(current_pointer)
 
-        bucket1['next_block'] = bucketNum2
-        self.write_block(current_pointer, bucket1) 
+        bucket1["next_block"] = bucketNum2
+        self.write_block(current_pointer, bucket1)
 
     def write_temp_dict(self):
-        #Escribe un diccionario temporal al disco
-        dict_file = f'dict_temp_{self.count_output}.bin'
-        with open(dict_file, 'wb') as f:
+        # Escribe un diccionario temporal al disco
+        dict_file = f"dict_temp_{self.count_output}.bin"
+        with open(dict_file, "wb") as f:
             pickle.dump(dict(self.output.items()), f)
         self.output.clear()
         self.count_output += 1
-        
 
     def read_dict(self, dict_num):
-        #Lee un diccionario específico del disco
-        with open(f'dict_{dict_num}.bin', 'rb') as f:
+        # Lee un diccionario específico del disco
+        with open(f"dict_{dict_num}.bin", "rb") as f:
             return pickle.load(f)
 
     def tokenize(self, text):
         return self.preprocessor.processText(text)
 
     def calculate_document_norms(self):
-        #Calcula la norma de cada documento
+        # Calcula la norma de cada documento
         self.document_norms = np.zeros(self.doc_count)
 
         for i in range(self.dict_count):
-            with open(f'dict_{i}.bin', 'rb') as f:
+            with open(f"dict_{i}.bin", "rb") as f:
                 dict_data = pickle.load(f)
-            
+
             for token, (df, block_num) in dict_data.items():
-                while(True):
+                while True:
                     block = self.read_block(block_num)
-                    for doc_id, tf in block['postings']:
+                    for doc_id, tf in block["postings"]:
                         self.document_norms[doc_id] += self.get_tfidf(tf, df) ** 2
-                    if block['next_block'] == -1:
+                    if block["next_block"] == -1:
                         break
-                    block_num = block['next_block']
-        
+                    block_num = block["next_block"]
+
         self.document_norms = np.sqrt(self.document_norms)
 
-
     def get_tfidf(self, term_freq, doc_freq):
-        #print(f"Term freq: {term_freq}, Doc freq: {doc_freq}")
+        # print(f"Term freq: {term_freq}, Doc freq: {doc_freq}")
         if term_freq > 0:
             tf = np.log10(1 + term_freq)
         else:
@@ -399,11 +455,11 @@ class InvertedIndex:
         return tf * idf
 
     def save_norms(self):
-        with open('document_norms.bin', 'wb') as f:
+        with open("document_norms.bin", "wb") as f:
             pickle.dump(self.document_norms, f)
 
     def load_norms(self):
-        with open('document_norms.bin', 'rb') as f:
+        with open("document_norms.bin", "rb") as f:
             self.document_norms = pickle.load(f)
 
     def clear_files(self):
@@ -426,18 +482,19 @@ class InvertedIndex:
 
     def debug_blocks(self):
         print("\n\nDEBUGGING INVERTED INDEX BLOCKS:")
-        
+
         print("Buckets:")
         for block in range(self.block_count):
-            with open(f'block_{block}.bin', 'rb') as f:
+            with open(f"block_{block}.bin", "rb") as f:
                 block_data = pickle.load(f)
             print(f"Block {block}: {block_data}")
-        
+
         print("\nDictionary:")
         for block in range(self.dict_count):
-            with open(f'dict_{block}.bin', 'rb') as f:
+            with open(f"dict_{block}.bin", "rb") as f:
                 dict_data = pickle.load(f)
             print(f"Len_Dict {block}: {len(dict_data)}")
             print(f"Dict {block}: {dict_data}")
 
         print(f"Document norms: {self.document_norms}")
+        # print(f"Document norms: {self.document_norms}")

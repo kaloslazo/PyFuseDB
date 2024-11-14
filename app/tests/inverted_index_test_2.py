@@ -50,7 +50,14 @@ documents = [
 ]
 
 index.build_index(documents)
-index.debug_blocks()
+
+final_dict = index._read_dict(0)
+print(f"Términos en diccionario final: {len(final_dict)}")
+print(f"Ejemplo de términos: {list(final_dict.keys())[:5]}")
+
+# Probar búsqueda
+results = index.search("flowers")
+print(f"Resultados para 'flowers': {len(results)}")
 
 query ="Spring vacation is my favourite season. many flowers, many animals, and more"
 result = index.search(query)

@@ -50,14 +50,19 @@ class TextPreProcess:
 
         return tokens
 
-
-    def preprocess_query(self, query):
-        tokens = self.processText(query)
-        tf_query = defaultdict(int)
-
-        # Count term frequencies in the query
+    def preprocess_query(self, text):
+        """Preprocesa una consulta"""
+        # Convertir todo a minúsculas
+        text = text.lower()
+        
+        # Tokenizar
+        tokens = self.processText(text)
+        
+        # Contar frecuencias
+        term_freq = defaultdict(int)
         for token in tokens:
-            tf_query[token] += 1
-
-        return tf_query
-
+            if len(token) > 1:  # Ignorar tokens de un solo carácter
+                term_freq[token] += 1
+                
+        print(f"Tokens procesados: {dict(term_freq)}")
+        return term_freq

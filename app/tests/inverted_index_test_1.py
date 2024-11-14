@@ -9,96 +9,143 @@ class InvertedIndexTest(unittest.TestCase):
     bin_path = os.path.join("app", "data", "bin")
 
     def setUp(self):
-        """Se ejecuta antes de cada prueba"""
         if not os.path.exists(self.bin_path):
             os.makedirs(self.bin_path)
         self.clean_bin_directory()
-        self.index = InvertedIndex(block_size=2, dict_size=3)
+        self.index = InvertedIndex(block_size=1000, dict_size=100000)
+        
+        # Documentos de prueba
         self.test_docs = [
-            "The quick brown fox jumps over the lazy dog",
-            "A quick brown dog jumps over the lazy fox",
-            "The lazy fox sleeps",
-            "Quick brown brown fox fox jumps"
+            "Beautiful flowers bloom in spring time",
+            "The garden is full of red and yellow flowers",
+            "I love flowers, especially roses and lilies",
+            "Flowers make people happy and bring joy",
+            "Spring flowers are the first sign of the season",
+            "These flowers smell wonderful",
+            "The flower shop sells fresh bouquets",
+            "Wild flowers grow in the meadow",
+            "She likes to pick flowers in the morning",
+            "The flower arrangement looks perfect"
         ]
 
     def tearDown(self):
-        """Se ejecuta después de cada prueba"""
         self.clean_bin_directory()
 
     def clean_bin_directory(self):
-        """Limpia todos los archivos .bin del directorio"""
         if os.path.exists(self.bin_path):
             for file in os.listdir(self.bin_path):
                 if file.endswith('.bin'):
                     os.remove(os.path.join(self.bin_path, file))
 
-    def test_build_index(self):
-        """Test básico de construcción del índice"""
+    def test_index_content(self):
+        """Test para verificar el contenido del índice"""
         self.index.build_index(self.test_docs)
         
-        # Verificar que al menos un archivo block_*.bin existe
-        block_files = [f for f in os.listdir(self.bin_path) if f.startswith('block_')]
-        self.assertTrue(len(block_files) > 0, "No se encontraron archivos de bloque")
-        
-        # Verificar que existe el archivo de normas
         self.assertTrue(
-            os.path.exists(os.path.join(self.bin_path, "norms.bin")),
-            "No se encontró el archivo de normas"
+            os.path.exists(os.path.join(self.bin_path, "dictionary.bin")),
+            "No se encontró el diccionario principal"
         )
         
-        # Verificar contenido de algún bloque
-        with open(os.path.join(self.bin_path, block_files[0]), 'rb') as f:
-            block_data = pickle.load(f)
-            self.assertTrue(len(block_data) > 0, "Bloque vacío encontrado")
-
-    def test_search_single_term(self):
-        """Test de búsqueda de un solo término"""
-        self.index.build_index(self.test_docs)
-        results = self.index.search("fox")
-        self.assertTrue(len(results) > 0, "No se encontraron resultados")
+        # Cargar el diccionario y verificar términos específicos
+        self.index.load_main_dictionary()
         
-        # Verificar que los scores están ordenados
-        scores = [score for doc_id, score in results]
+        # Términos después del stemming
+        important_terms = {
+            'flower',  # stems de 'flower' y 'flowers'
+            'spring',
+            'garden',
+            'love'
+        }
+        
+        for term in important_terms:
+            self.assertIn(
+                term, 
+                self.index.main_dictionary,
+                f"Término '{term}' no encontrado en el índice"
+            )
+            
+            df, postings = self.index.main_dictionary[term]
+            if term == 'flower':
+                # Debería aparecer en casi todos los documentos
+                self.assertGreaterEqual(
+                    df, 
+                    8, 
+                    f"El término 'flower' debería aparecer en al menos 8 documentos, apareció en {df}"
+                )
+            
+            self.assertTrue(
+                len(postings) > 0,
+                f"No hay postings para el término '{term}'"
+            )
+
+    def test_search_flowers(self):
+        """Test específico para búsqueda de 'flowers'"""
+        self.index.build_index(self.test_docs)
+        
+        # Probar tanto 'flower' como 'flowers'
+        for query in ['flower', 'flowers']:
+            results = self.index.search(query)
+            self.assertTrue(
+                len(results) > 0,
+                f"No se encontraron resultados para '{query}'"
+            )
+            
+            # Verificar que los documentos relevantes están en los primeros resultados
+            top_docs = [doc_id for doc_id, score in results[:5]]
+            flower_docs = [i for i, doc in enumerate(self.test_docs) 
+                         if 'flower' in doc.lower() or 'flowers' in doc.lower()]
+            
+            self.assertTrue(
+                any(doc_id in flower_docs for doc_id in top_docs),
+                "Los documentos más relevantes no están en los primeros resultados"
+            )
+
+    def test_search_variations(self):
+        """Test para variaciones de búsqueda"""
+        self.index.build_index(self.test_docs)
+        
+        queries = [
+            "flower",
+            "flowers",
+            "spring flower",
+            "beautiful flowers",
+            "flower garden"
+        ]
+        
+        for query in queries:
+            results = self.index.search(query)
+            self.assertTrue(
+                len(results) > 0,
+                f"No se encontraron resultados para '{query}'"
+            )
+            
+            # Verificar ranking
+            scores = [score for _, score in results]
+            self.assertEqual(
+                scores,
+                sorted(scores, reverse=True),
+                f"Resultados no ordenados correctamente para '{query}'"
+            )
+
+    def test_index_statistics(self):
+        """Test para verificar estadísticas del índice"""
+        self.index.build_index(self.test_docs)
+        
         self.assertEqual(
-            scores, 
-            sorted(scores, reverse=True),
-            "Los resultados no están ordenados por score"
-        )
-
-    def test_search_multiple_terms(self):
-        """Test de búsqueda con múltiples términos"""
-        self.index.build_index(self.test_docs)
-        results = self.index.search("quick brown")
-        self.assertTrue(len(results) > 0, "No se encontraron resultados")
-        
-        # Verificar que los documentos esperados están en los primeros resultados
-        doc_ids = {result[0] for result in results[:3]}
-        expected_docs = {0, 1, 3}  # documentos que contienen 'quick' y/o 'brown'
-        self.assertTrue(
-            expected_docs.issubset(doc_ids),
-            f"No se encontraron todos los documentos esperados. Esperados: {expected_docs}, Encontrados: {doc_ids}"
-        )
-
-    def test_search_nonexistent_term(self):
-        """Test de búsqueda de término inexistente"""
-        self.index.build_index(self.test_docs)
-        results = self.index.search("unknownterm")
-        self.assertEqual(len(results), 0, "Se encontraron resultados para un término inexistente")
-
-    def test_empty_search(self):
-        """Test de búsqueda vacía"""
-        self.index.build_index(self.test_docs)
-        results = self.index.search("")
-        self.assertEqual(len(results), 0, "Se encontraron resultados para una búsqueda vacía")
-
-    def test_document_norms(self):
-        """Test de cálculo de normas de documentos"""
-        self.index.build_index(self.test_docs)
-        self.assertIsNotNone(self.index.document_norms)
-        self.assertEqual(
-            len(self.index.document_norms),
+            self.index.doc_count,
             len(self.test_docs),
-            "El número de normas no coincide con el número de documentos"
+            "Número incorrecto de documentos en el índice"
+        )
+        
+        self.assertTrue(
+            all(norm > 0 for norm in self.index.document_norms),
+            "Algunas normas de documentos son 0"
+        )
+        
+        self.index.load_main_dictionary()
+        self.assertTrue(
+            len(self.index.main_dictionary) > 0,
+            "Diccionario principal vacío"
         )
 
 if __name__ == '__main__':

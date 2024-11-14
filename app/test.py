@@ -43,22 +43,29 @@ documents = [
     "Spring brings colorful flowers and fresh green leaves on trees.",
     "Many animals come out of hibernation in spring.",
     "The arrival of spring means the return of chirping birds.",
-    "Spring is a popular time for planting gardens and growing flowers."
+    "Spring is a popular time for planting gardens and growing flowers.",
+    "Summer, Winter, Fall, and many other seasons."
 ]
 
 
 # Testeando el preprocesamiento de texto
-preprocessor = TextPreProcess()
-preprocessor.loadStopList()
+# preprocessor = TextPreProcess()
+# preprocessor.loadStopList()
 
-for doc in documents:
-    tokens = preprocessor.processText(doc)
-    print(tokens)
+# for doc in documents:
+#     tokens = preprocessor.processText(doc)
+#     print(tokens)
 
 # Testeando la construcción del índice invertido
 index.build_index(documents)
 
+index.debug_blocks()
 
-# Test de las normas
-index.load_norms()
-print(index.document_norms)
+query ="Spring vacation is my favourite season. many flowers, many animals, and more"
+result = index.search(query)
+
+for (doc_id, score) in result:
+    print(f"DOC {doc_id} : {float(score)}")
+
+print("Bye!")
+

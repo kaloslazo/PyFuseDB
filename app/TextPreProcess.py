@@ -1,7 +1,7 @@
 import nltk
-import pandas as pd
 import re
 from nltk.stem.snowball import SnowballStemmer
+from collections import defaultdict
 
 nltk.download('punkt')
 nltk.download('punkt_tab')
@@ -44,4 +44,15 @@ class TextPreProcess:
         tokens = self.stem(tokens)
 
         return tokens
+
+
+    def preprocess_query(self, query):
+        tokens = self.processText(query)
+        tf_query = defaultdict(int)
+
+        # Count term frequencies in the query
+        for token in tokens:
+            tf_query[token] += 1
+
+        return tf_query
 

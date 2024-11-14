@@ -3,7 +3,6 @@ import os
 from collections import defaultdict
 import numpy as np
 from TextPreProcess import TextPreProcess
-import math
 
 
 class InvertedIndex:
@@ -15,7 +14,7 @@ class InvertedIndex:
         self.block_count = 0
         self.dict_count = 0
         self.doc_count = 0
-        self.document_norms = []
+        self.document_norms = None
         self.count_output = 0
         self.output = defaultdict()
         self.newListParameters = []
@@ -24,13 +23,7 @@ class InvertedIndex:
         self.preprocessor.loadStopList()
 
     def build_index(self, documents):
-        # Limpieza inicial
-        if self.block_count > 0:
-            for block in range(self.block_count):
-                file_path = f'block_{block}.bin'
-                if os.path.exists(file_path):
-                    os.remove(file_path)
-            self.__init__(self.block_size, self.dict_size)
+        self.clear_files()
 
         print(f"Construyendo índice con {len(documents)} documentos")
         self.doc_count = len(documents)
@@ -65,7 +58,7 @@ class InvertedIndex:
         # Merge de bloques
         self.merge_blocks()
 
-        #Calcular normas de documentos
+        # Calcular normas de documentos
         self.calculate_document_norms()
         self.save_norms()
 
@@ -75,35 +68,79 @@ class InvertedIndex:
 
         scores = defaultdict(float)
 
-        tokens = self.tokenize(query)
-        query_tfidf = np.zeros(len(tokens))
+        terms_dict = self.preprocessor.preprocess_query(query)
+        query_tfidf = {}
         query_norm = 0
 
-        for i, term in enumerate(tokens):
+        for term, tf in terms_dict.items():
             # fetch postings list for token
-            postings_list = [(0, 1)]
+            postings_list = self.fetch_postings_list(term)
 
             if not postings_list:
-                continue
+                continue # term not in disk
 
-            for (doc_id, tf) in postings_list: 
-                tfidf = self.get_tfidf(tf, len(postings_list))
-                scores[doc_id] += tfidf * query_tfidf[i]
+            df = len(postings_list)
+            query_tfidf[term] = self.get_tfidf(tf, df)
+            query_norm += query_tfidf[term] ** 2
 
+            # print(f"postings list for {term}: {postings_list}")
+            # print(f"query tf for {term}: {tf}")
 
-        if not self.document_norms:
-            self.load_norms()
+            for (doc_id, doc_tf) in postings_list:
+                doc_tfidf = self.get_tfidf(doc_tf, df)
+                scores[doc_id] += doc_tfidf * query_tfidf[term]
         
-        query_norm = np.sqrt(query_norm)
+        if query_norm != 0:
+            if self.document_norms is None:
+                self.load_norms()
 
-        for doc_id in scores.keys():
-            scores[doc_id] /= (self.document_norms[doc_id] * query_norm)
+            query_norm = np.sqrt(query_norm)
+            print(f"query_norm = {query_norm}")
+            for doc_id in scores.keys():
+                scores[doc_id] /= (self.document_norms[doc_id] * query_norm)
 
 
         scores = sorted(scores.items(), key=lambda item: item[1], reverse=True)
         print(f"Número de resultados encontrados: {len(scores)}")
         return scores[:top_k]
+
     
+    def fetch_postings_list(self, term):
+        low = 0
+        high = self.dict_count - 1
+
+        # binary search en los archivos de diccionario
+        # hasta encontrar la lista de postings 
+        while low <= high:
+            mid = (low + high) // 2
+            dictionary = self.read_dict(mid)
+
+            # found
+            if term in dictionary:
+                doc_freq, block_num = dictionary[term]
+
+                postings_list = []
+                while True:
+                    block_data = self.read_block(block_num)
+                    postings_list.extend(block_data['postings'])
+                    block_num = block_data['next_block']
+
+                    if block_num == -1:
+                        break
+
+                return postings_list
+            
+            # continuar la busqueda
+            first_key = next(iter(dictionary.keys()))
+            if term < first_key:
+                high = mid - 1
+            else:
+                low = mid + 1
+
+        # not found
+        return []
+
+
     def merge_lotes(self, P, Q, PSIZE, QSIZE):
         i = 0
         j = 0
@@ -192,9 +229,9 @@ class InvertedIndex:
         salto = self.count_output - initial_count
         if len(self.newListParameters) == 0: #vacia
             self.newListParameters.append([initial_count, None, salto, None])
-        elif self.newListParameters[-1][0]!=None and self.newListParameters[-1][1] != None: #ultima llena
+        elif self.newListParameters[-1][0] is not None and self.newListParameters[-1][1] is not None: #ultima llena
             self.newListParameters.append([initial_count, None, salto, None])
-        elif self.newListParameters[-1][0] != None and self.newListParameters[-1][1] == None: #ultima semi llena
+        elif self.newListParameters[-1][0] is not None and self.newListParameters[-1][1] is None: #ultima semi llena
             self.newListParameters[-1][1] = initial_count
             self.newListParameters[-1][3] = salto
 
@@ -213,7 +250,7 @@ class InvertedIndex:
                 self.merge_lotes(a, b, aSize, bSize)
 
             # asegurar que el último lote se cierre
-            if self.newListParameters[-1][1] == None:
+            if self.newListParameters[-1][1] is None:
                 self.newListParameters[-1][1] = self.count_output
                 self.newListParameters[-1][3] = self.count_output + 1
 
@@ -305,7 +342,6 @@ class InvertedIndex:
     def concatenate_postings(self, bucketNum1, bucketNum2):
         #print(f"Concatenando {bucketNum1} y {bucketNum2}")
         bucket1 = self.read_block(bucketNum1)
-        bucket2 = self.read_block(bucketNum2)
 
         current_pointer = bucketNum1
         while bucket1['next_block'] != -1:
@@ -355,12 +391,12 @@ class InvertedIndex:
     def get_tfidf(self, term_freq, doc_freq):
         #print(f"Term freq: {term_freq}, Doc freq: {doc_freq}")
         if term_freq > 0:
-            x = np.log10(1 + term_freq)
+            tf = np.log10(1 + term_freq)
         else:
-            x = 0
+            tf = 0
 
-        y = np.log10(self.doc_count / doc_freq)
-        return x * y
+        idf = np.log10(self.doc_count / doc_freq)
+        return tf * idf
 
     def save_norms(self):
         with open('document_norms.bin', 'wb') as f:
@@ -369,6 +405,24 @@ class InvertedIndex:
     def load_norms(self):
         with open('document_norms.bin', 'rb') as f:
             self.document_norms = pickle.load(f)
+
+    def clear_files(self):
+        index = 0
+        while True:
+            file_path = f'block_{index}.bin'
+            if not os.path.exists(file_path):
+                break
+            else:
+                os.remove(file_path)
+            index += 1
+        index = 0
+        while True:
+            file_path = f'dict_{index}.bin'
+            if not os.path.exists(file_path):
+                break
+            else:
+                os.remove(file_path)
+            index += 1
 
     def debug_blocks(self):
         print("\n\nDEBUGGING INVERTED INDEX BLOCKS:")
@@ -386,4 +440,4 @@ class InvertedIndex:
             print(f"Len_Dict {block}: {len(dict_data)}")
             print(f"Dict {block}: {dict_data}")
 
-        #print(f"Document norms: {self.document_norms}")
+        print(f"Document norms: {self.document_norms}")

@@ -1,4 +1,5 @@
 import time
+import pandas as pd
 import gradio as gr
 from DataLoader import DataLoader
 from SqlParser import SqlParser
@@ -26,76 +27,81 @@ except Exception as e:
     exit(1)
 
 gc.collect()
-
 def createDemo(dataLoader=dataLoader, sqlParser=sqlParser):
     def updateResults(query, topK, retrievalModel):
         try:
             startTime = time.time()
-            queryResults = dataLoader.executeQuery(query, topK)
+            queryResults = dataLoader.executeQuery(query, int(topK))
             executionTime = time.time() - startTime
-
+            
             parsed_query = sqlParser.parseQuery(query)
             fields = parsed_query['fields']
             if '*' in fields:
                 fields = list(dataLoader.data.columns)
-            headers = fields + ['Relevancia (%)']
-
+            
             if not queryResults:
-                return None, headers, f"No se encontraron resultados. Tiempo de ejecución: {executionTime:.2f} segundos"
-
-            # Asegúrate de que los resultados sean una lista de listas (cada resultado es una fila)
-            results = [[str(item) for item in result] for result in queryResults]
-
-            print(f"Resultados de la consulta: {results}")
-            print(f"Encabezados: {headers}")
-
-            # Retorna los resultados y los encabezados por separado
-            return results, headers, f"Tiempo de ejecución: {executionTime:.2f} segundos"
-
+                return None, f"No se encontraron resultados. Tiempo: {executionTime:.2f} segundos"
+            
+            df = pd.DataFrame(queryResults, columns=fields + ['Relevancia (%)'])
+            return df, f"Tiempo: {executionTime:.2f} segundos"
+            
         except Exception as e:
-            print(f"Error in updateResults: {str(e)}")
+            print(f"Error: {str(e)}")
             traceback.print_exc()
-            raise gr.Error(f"Ocurrió un error: {str(e)}")
+            raise gr.Error(f"Error: {str(e)}")
 
     with gr.Blocks(theme=gr.themes.Soft(font=[gr.themes.GoogleFont("Plus Jakarta Sans")], primary_hue="blue")) as demo:
-        gr.Markdown("# PyFuseDB")
-        gr.Markdown("Sistema que integra varios modelos de datos y técnicas avanzadas de recuperación de información dentro de una única base de datos.")
-
-        with gr.Tab("Parte 1: Índice Invertido"):
-            gr.Markdown("## Consulta")
-            with gr.Row():
-                with gr.Column(scale=2):
-                    queryInput = gr.Textbox(
-                        lines=5.9,
-                        label="Consulta SQL",
-                        placeholder="Ingresa tu consulta SQL",
+        with gr.Column(scale=1):
+            gr.Markdown("# PyFuseDB", elem_classes="header")
+            gr.Markdown("Sistema que integra varios modelos de datos y técnicas avanzadas de recuperación de información.", elem_classes="subtitle")
+            
+            with gr.Tab("Parte 1: Índice Invertido"):
+                with gr.Column():
+                    gr.Markdown("## Consulta", elem_classes="section-title")
+                    with gr.Row():
+                        with gr.Column(scale=2):
+                            query_input = gr.Textbox(
+                                lines=3,
+                                label="Consulta SQL",
+                                placeholder="SELECT artist,song,lyrics FROM songs LIKE love music",
+                                elem_classes="query-input"
+                            )
+                        with gr.Column(scale=1):
+                            top_k = gr.Number(
+                                label="Top K resultados",
+                                value=10,
+                                minimum=1,
+                                maximum=20,
+                                step=1
+                            )
+                            model = gr.Dropdown(
+                                label="Modelo de búsqueda",
+                                choices=indexRetrievalChoices,
+                                value=indexRetrievalChoices[0]
+                            )
+                    
+                    search_button = gr.Button(
+                        "Ejecutar búsqueda",
+                        variant="primary"
                     )
-                with gr.Column(scale=1):
-                    topK = gr.Number(label="Top K resultados", value=10, minimum=0, step=1, interactive=True)
-                    retrievalModel = gr.Dropdown(
-                        label="Modelo de recuperación",
-                        interactive=True,
-                        choices=indexRetrievalChoices,
-                        value=indexRetrievalChoices[0],
+                    
+                    gr.Markdown("## Resultados")
+                    results_df = gr.Dataframe(
+                        headers=None,
+                        datatype=["str"],
+                        wrap=True,
+                        overflow_row_behaviour="paginate",
+                        max_rows=10
                     )
-            executeBtn = gr.Button("Ejecutar consulta", variant="primary")
-
-            gr.Markdown("## Resultados")
-            resultsDataframe = gr.Dataframe(
-                headers=["Resultados"],
-                datatype=["str"],
-                label="Resultados de la búsqueda",
-                row_count=(10, "dynamic"),
-                col_count=(1, "dynamic"),
-            )
-            executionTime = gr.Markdown()
-            executeBtn.click(
+                    execution_time = gr.Markdown()
+            
+            with gr.Tab("Parte 2: Índice Multidimensional"):
+                gr.Markdown("## En desarrollo")
+            
+            search_button.click(
                 fn=updateResults,
-                inputs=[queryInput, topK, retrievalModel],
-                outputs=[resultsDataframe, gr.Dataframe(), executionTime]
+                inputs=[query_input, top_k, model],
+                outputs=[results_df, execution_time]
             )
-
-        with gr.Tab("Parte 2: Índice Multidimensional"):
-            gr.Markdown("## En desarrollo")
 
     return demo

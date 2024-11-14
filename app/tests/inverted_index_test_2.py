@@ -1,6 +1,8 @@
+import os
+import sys
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from InvertedIndex import InvertedIndex
-from TextPreProcess import TextPreProcess
-import nltk
 
 index = InvertedIndex(block_size=2, dict_size=20)
 documents = [
@@ -47,25 +49,10 @@ documents = [
     "Summer, Winter, Fall, and many other seasons."
 ]
 
-
-# Testeando el preprocesamiento de texto
-# preprocessor = TextPreProcess()
-# preprocessor.loadStopList()
-
-# for doc in documents:
-#     tokens = preprocessor.processText(doc)
-#     print(tokens)
-
-# Testeando la construcción del índice invertido
 index.build_index(documents)
-
 index.debug_blocks()
 
 query ="Spring vacation is my favourite season. many flowers, many animals, and more"
 result = index.search(query)
 
-for (doc_id, score) in result:
-    print(f"DOC {doc_id} : {float(score)}")
-
-print("Bye!")
-
+for (doc_id, score) in result: print(f"DOC {doc_id} : {float(score)}")

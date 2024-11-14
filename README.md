@@ -1,4 +1,4 @@
-<h1 align="center">PyFuseDB</h1>
+![](./docs/banner.png)
 
 PyFuseDB es un sistema que integra varios modelos de datos y técnicas avanzadas de recuperación de información dentro de una única base de datos. Nuestro sistema permite a los usuarios recuperar datos estructurados por medio de un **índice invertido** y datos no estructurados como imágenes y audio por medio de **estructuras multidimensionales** que utilizan vectores característicos.
 

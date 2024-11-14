@@ -76,6 +76,12 @@ Se implementó una funcionalidad para cargar imágenes y audio a la base de dato
 - Los vectores se almacenan en la base de datos para su posterior recuperación.
 
 ### 4.3 Capturas de Pantalla
+#### 4.3.1 Formulario de consulta
+![](./docs/app1.png)
+
+#### 4.3.2 Ejemplo de respuesta
+![](./docs/app2.png)
+
 
 ### 4.2 Análisis Comparativo de otras Implementaciones
 

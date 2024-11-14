@@ -1,24 +1,50 @@
 <h1 align="center">PyFuseDB</h1>
 
-PyFuseDB es un sistema que integra varios modelos de datos y técnicas avanzadas de recuperación de información dentro de una única base de datos. Nuestro sistema permite a los usuarios recuperar datos estructurados por medio de un **índice invertido** y datos no estructurados como imágenes y audio por medio de **estructuras multidimensionales** que utilizan vectores característicos.
-
+**PyFuseDB** es un sistema que integra varios modelos de datos y técnicas avanzadas de recuperación de información dentro de una única base de datos. Nuestro sistema permite a los usuarios recuperar datos estructurados mediante un **índice invertido** y datos no estructurados, como imágenes y audio, por medio de **estructuras multidimensionales** que utilizan vectores característicos.
 
 ## 1. Introducción
 
 ### 1.1 Objetivo del Proyecto
+El objetivo de PyFuseDB es crear una base de datos robusta y versátil capaz de gestionar y recuperar datos tanto estructurados como no estructurados de manera eficiente. A través de la implementación de un índice invertido para datos textuales y el uso de estructuras multidimensionales para datos en formatos complejos, se busca optimizar la consulta y recuperación de información en distintos contextos de uso.
 
 ### 1.2 Descripción del Dominio de Datos
+Para este proyecto, se utiliza el **Spotify Million Song Dataset**, una base de datos pública que contiene información sobre canciones. Este conjunto de datos incluye el nombre de la canción, el nombre del artista, el enlace a la canción y la letra, recolectados hasta el año 2022. Este dominio de datos resulta ideal para experimentos en clasificación, recomendación y recuperación de información debido a su riqueza textual y su aplicación en sistemas de recomendación y análisis de música.
 
 ### 1.3 Importancia de Técnicas de Indexación
-
+La eficiencia en la recuperación de información es crucial en grandes volúmenes de datos, como los que maneja PyFuseDB. Las técnicas de indexación permiten reducir significativamente el tiempo de respuesta en las consultas, optimizando el rendimiento del sistema. El uso de índices invertidos para el texto (como las letras de las canciones) facilita búsquedas rápidas, mientras que las estructuras multidimensionales mejoran el acceso y recuperación de datos no estructurados a través de características representativas, lo que es esencial en aplicaciones avanzadas como la recuperación de contenido en multimedia.
 
 ## 2. Backend: Índice Invertido
 
-### 2.1 Construcción del Índice Invertido 
+El backend de PyFuseDB se basa en la implementación de un índice invertido para permitir una recuperación rápida y eficiente de documentos en función de términos textuales. A continuación, se describen las principales funcionalidades del índice invertido, su construcción y optimización para consultas.
+
+### 2.1 Construcción del Índice Invertido
+La clase `InvertedIndex` define el núcleo de la construcción del índice invertido. Este proceso se realiza en bloques, con el objetivo de manejar grandes volúmenes de datos sin sobrecargar la memoria. La implementación permite almacenar el índice en archivos separados de acuerdo con el tamaño del bloque configurado (`block_size`), generando archivos de bloques en formato `.pkl`.
+
+- **Documentos y Tokenización**: Cada documento se analiza y se tokeniza usando `TfidfVectorizer` de `scikit-learn`, el cual elimina las palabras comunes (stop words) y convierte las palabras a minúsculas para un análisis uniforme. Los tokens extraídos se almacenan en el `current_block`, que es un diccionario donde cada token apunta a una lista de identificadores de documentos (`doc_id`) en los que aparece.
+  
+- **Bloques**: Cuando el número de tokens en `current_block` alcanza el `block_size`, el bloque se serializa y se almacena en un archivo utilizando `pickle`, optimizando el uso de la memoria y permitiendo una construcción de índice en grandes datasets.
+
+- **Normalización**: Durante la construcción del índice, se calcula la norma de cada documento en base a sus valores TF-IDF. Estas normas son fundamentales para calcular la similitud de coseno en las búsquedas y se almacenan en `document_norms` para su posterior uso.
+
+La función `build_index` permite la construcción del índice a partir de una lista de documentos, procesándolos en lotes (`batch_size`) para controlar el flujo de datos. Esta función muestra el progreso de la construcción y asegura que el índice quede distribuido en bloques manejables.
 
 ### 2.2 Optimización de Consultas con Similitud de Coseno
+Una vez construido el índice, PyFuseDB permite realizar consultas eficientes utilizando similitud de coseno entre el vector de consulta y los vectores de documentos en el índice. La similitud de coseno es adecuada para medir la relevancia en búsquedas textuales, ya que considera tanto la frecuencia de términos como la magnitud de los documentos.
+
+- **Vector de Consulta**: Para cada consulta, se genera un vector de consulta con `TfidfVectorizer`, similar al proceso de tokenización de los documentos.
+
+- **Calculo de Similitud**: La búsqueda de términos de consulta se realiza cargando cada bloque del índice y comprobando si los términos están presentes en el bloque cargado. Si se encuentra un término, se calcula la similitud de coseno multiplicando los valores TF-IDF del término en la consulta por los valores de los documentos almacenados, usando las normas previamente calculadas. Esto permite ordenar los documentos en función de la relevancia y devolver los `top_k` resultados más relevantes.
+
+La función `search` implementa la búsqueda y muestra el progreso de la consulta, incluyendo los términos de la consulta y el número de resultados encontrados.
 
 ### 2.3 Construcción del Índice Invertido en PostgreSQL
+Además de la implementación en Python, PyFuseDB permite construir un índice invertido en **PostgreSQL**. PostgreSQL cuenta con soporte para índices GIN (Generalized Inverted Index), que son ideales para optimizar búsquedas en datos textuales. La integración con PostgreSQL permite manejar grandes volúmenes de datos y realizar consultas SQL avanzadas.
+
+- **Configuración de PostgreSQL**: En PostgreSQL, se crea una tabla para almacenar los documentos con columnas que incluyen el texto y otros metadatos, como el nombre de la canción y el artista. A esta tabla se le aplica un índice GIN en la columna de texto.
+
+- **Consulta Avanzada**: Una vez creado el índice GIN, se pueden realizar consultas con operadores de búsqueda de texto (`@@` para búsquedas con peso) o búsquedas de similitud de coseno utilizando extensiones de PostgreSQL. Esto permite que las consultas textuales sean mucho más rápidas en comparación con una búsqueda lineal.
+
+Este enfoque de construir un índice invertido en PostgreSQL complementa la solución en Python, permitiendo consultas rápidas tanto a nivel de backend en el sistema de archivos como en una base de datos SQL.
 
 
 ## 3. Backend: Índice Multidimensional

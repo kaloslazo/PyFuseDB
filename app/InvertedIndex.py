@@ -1,9 +1,9 @@
 import pickle
 import os
+import glob
 from collections import defaultdict
 import numpy as np
 from TextPreProcess import TextPreProcess
-
 
 class InvertedIndex:
     def __init__(self, block_size=1000, dict_size=100):
@@ -18,6 +18,11 @@ class InvertedIndex:
         self.count_output = 0
         self.output = defaultdict()
         self.newListParameters = []
+        
+        # Asegurar que el directorio bin existe
+        self.bin_path = os.path.join("app", "data", "bin")
+        if not os.path.exists(self.bin_path):
+            os.makedirs(self.bin_path)
 
         self.preprocessor = TextPreProcess()
         self.preprocessor.loadStopList()
@@ -193,13 +198,13 @@ class InvertedIndex:
         q = Q
 
         # Leer diccionarios iniciales de p y q
-        dict1 = self.read_dict(p)
+        dict1 = self.read_dict(p) if p < self.dict_count else {}
         keys1 = list(dict1.keys())
         dict2 = self.read_dict(q) if Q < self.dict_count else {}
-
         keys2 = list(dict2.keys()) if dict2 else []
 
         initial_count = self.count_output
+
         # Bucle principal de mezcla
         while (
             p < min(P + PSIZE, self.dict_count)
@@ -228,6 +233,9 @@ class InvertedIndex:
             else:
                 self.output[keys2[j]] = dict2[keys2[j]]
                 j += 1
+
+            if len(self.output) >= self.dict_size:
+                self.write_temp_dict()
 
             # Reiniciar y leer nuevos bloques si es necesario
             if i == len(keys1) and p + 1 < min(P + PSIZE, self.dict_count):
@@ -309,7 +317,7 @@ class InvertedIndex:
                 self.merge_lotes(a, b, aSize, bSize)
 
             # asegurar que el último lote se cierre
-            if self.newListParameters[-1][1] is None:
+            if self.newListParameters and self.newListParameters[-1][1] is None:
                 self.newListParameters[-1][1] = self.count_output
                 self.newListParameters[-1][3] = self.count_output + 1
 
@@ -317,17 +325,21 @@ class InvertedIndex:
 
             # eliminar diccionarios antiguos
             for i in range(0, self.dict_count):
-                os.remove(f"dict_{i}.bin")
+                old_dict = os.path.join(self.bin_path, f"dict_{i}.bin")
+                if os.path.exists(old_dict):
+                    os.remove(old_dict)
 
             # renombrar diccionarios temporales
             for i in range(self.count_output):
-                os.rename(f"dict_temp_{i}.bin", f"dict_{i}.bin")
+                temp_dict = os.path.join(self.bin_path, f"dict_temp_{i}.bin")
+                new_dict = os.path.join(self.bin_path, f"dict_{i}.bin")
+                if os.path.exists(temp_dict):
+                    os.rename(temp_dict, new_dict)
+
             self.dict_count = self.count_output
             self.count_output = 0
 
             self.debug_blocks()
-            # print("ListParameters:", listParameters)
-            # input("Press Enter to continue...")
 
             if len(listParameters) == 1 and listParameters[0][1] == self.dict_count:
                 break
@@ -335,7 +347,6 @@ class InvertedIndex:
     def flush_term(self, token):
         """Escribe un término específico a disco"""
         postings = self.current_block[token]
-
         if len(postings) > 0:
             # Crear nuevo bloque
             block_data = {
@@ -343,8 +354,7 @@ class InvertedIndex:
                 "next_block": -1,  # -1 indica que es el último bloque
             }
 
-            # Escribir bloque
-            block_file = f"block_{self.block_count}.bin"
+            block_file = os.path.join(self.bin_path, f"block_{self.block_count}.bin")
             with open(block_file, "wb") as f:
                 pickle.dump(block_data, f)
 
@@ -367,34 +377,29 @@ class InvertedIndex:
                 self.dict_keyPointer[token][1] = self.block_count
 
             self.dict_keyPointer[token][0] += len(postings)
-
             self.block_count += 1
             self.current_block[token] = []  # Limpiar el bloque actual
 
     def flush_all_terms(self):
-        # Hacer flush de los términos
-        # print("edrftgyhu7yhgtrfwsaz", len(self.dict_keyPointer))
+        """Escribe un término específico a disco"""
         for token in list(self.current_block.keys()):
             self.flush_term(token)
 
-        # Escribir diccionario ordenado
-        dict_file = f"dict_{self.dict_count}.bin"
-        # print("edrftgyhu7yhgtrfwsaz", len(self.dict_keyPointer))
+        # Escribir diccionario ordenado usando la ruta correcta
+        dict_file = os.path.join(self.bin_path, f"dict_{self.dict_count}.bin")
         with open(dict_file, "wb") as f:
             pickle.dump(dict(sorted(self.dict_keyPointer.items())), f)
 
         self.dict_count += 1
         self.dict_keyPointer.clear()
-        self.current_block.clear()  # Limpiar el bloque actual
+        self.current_block.clear()
 
     def read_block(self, block_num):
-        # Lee un bloque específico del disco
-        with open(f"block_{block_num}.bin", "rb") as f:
+        with open(os.path.join(self.bin_path, f"block_{block_num}.bin"), "rb") as f:
             return pickle.load(f)
 
     def write_block(self, block_num, block_data):
-        # Escribe un bloque específico al disco
-        with open(f"block_{block_num}.bin", "wb") as f:
+        with open(os.path.join(self.bin_path, f"block_{block_num}.bin"), "wb") as f:
             pickle.dump(block_data, f)
 
     def concatenate_postings(self, bucketNum1, bucketNum2):
@@ -410,17 +415,27 @@ class InvertedIndex:
         self.write_block(current_pointer, bucket1)
 
     def write_temp_dict(self):
-        # Escribe un diccionario temporal al disco
-        dict_file = f"dict_temp_{self.count_output}.bin"
+        dict_file = os.path.join(self.bin_path, f"dict_temp_{self.count_output}.bin")
         with open(dict_file, "wb") as f:
             pickle.dump(dict(self.output.items()), f)
         self.output.clear()
         self.count_output += 1
 
     def read_dict(self, dict_num):
-        # Lee un diccionario específico del disco
-        with open(f"dict_{dict_num}.bin", "rb") as f:
-            return pickle.load(f)
+        dict_file = os.path.join(self.bin_path, f"dict_{dict_num}.bin")
+        if os.path.exists(dict_file):
+            with open(dict_file, "rb") as f:
+                return pickle.load(f)
+        return {}
+
+    def save_norms(self):
+        with open(os.path.join(self.bin_path, "document_norms.bin"), "wb") as f:
+            pickle.dump(self.document_norms, f)
+
+    def load_norms(self):
+        with open(os.path.join(self.bin_path, "document_norms.bin"), "rb") as f:
+            self.document_norms = pickle.load(f)
+
 
     def tokenize(self, text):
         return self.preprocessor.processText(text)
@@ -463,38 +478,31 @@ class InvertedIndex:
             self.document_norms = pickle.load(f)
 
     def clear_files(self):
-        index = 0
-        while True:
-            file_path = f'block_{index}.bin'
-            if not os.path.exists(file_path):
-                break
-            else:
-                os.remove(file_path)
-            index += 1
-        index = 0
-        while True:
-            file_path = f'dict_{index}.bin'
-            if not os.path.exists(file_path):
-                break
-            else:
-                os.remove(file_path)
-            index += 1
-
+        for pattern in ["block_*.bin", "dict_*.bin", "dict_temp_*.bin", "document_norms.bin"]:
+            for file in glob.glob(os.path.join(self.bin_path, pattern)):
+                try:
+                    os.remove(file)
+                except OSError as e:
+                    print(f"Error al eliminar {file}: {e}")
+    
     def debug_blocks(self):
         print("\n\nDEBUGGING INVERTED INDEX BLOCKS:")
 
         print("Buckets:")
         for block in range(self.block_count):
-            with open(f"block_{block}.bin", "rb") as f:
-                block_data = pickle.load(f)
-            print(f"Block {block}: {block_data}")
+            block_path = os.path.join(self.bin_path, f"block_{block}.bin")
+            if os.path.exists(block_path):
+                with open(block_path, "rb") as f:
+                    block_data = pickle.load(f)
+                    print(f"Block {block}: {block_data}")
 
         print("\nDictionary:")
         for block in range(self.dict_count):
-            with open(f"dict_{block}.bin", "rb") as f:
-                dict_data = pickle.load(f)
-            print(f"Len_Dict {block}: {len(dict_data)}")
-            print(f"Dict {block}: {dict_data}")
+            dict_path = os.path.join(self.bin_path, f"dict_{block}.bin")
+            if os.path.exists(dict_path):
+                with open(dict_path, "rb") as f:
+                    dict_data = pickle.load(f)
+                    print(f"Dict {block}: {dict_data}")
 
-        print(f"Document norms: {self.document_norms}")
-        # print(f"Document norms: {self.document_norms}")
+        if self.document_norms is not None:
+            print(f"Document norms: {self.document_norms}")

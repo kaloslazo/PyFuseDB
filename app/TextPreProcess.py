@@ -1,5 +1,6 @@
 import nltk
 import re
+import os
 from nltk.stem.snowball import SnowballStemmer
 from collections import defaultdict
 
@@ -8,7 +9,7 @@ nltk.download('punkt_tab')
 
 class TextPreProcess:
     def __init__(self):
-        self.stopListPath = "./data/stopList.txt"
+        self.stopListPath = os.path.join(os.path.dirname(__file__), "data", "stopList.txt")
         self.stemmer = SnowballStemmer("english")
         self.stopList = set()  # Change 6: Using a set for faster lookup
         print("TextPreProcess initialized.")
@@ -16,10 +17,14 @@ class TextPreProcess:
     def loadStopList(self):
         try:
             with open(self.stopListPath, encoding="utf-8") as file:
-                self.stopList = {line.strip().lower() for line in file}  # Change 1: Fixed issue with clearing the list
-                print("Stopwords list loaded successfully.")
+                self.stopList = {line.strip().lower() for line in file}
+            print("Stopwords list loaded successfully.")
         except FileNotFoundError:
-            print("Stopwords list not found.")
+            print(f"Stopwords list not found at {self.stopListPath}")
+            # Crear una lista de stopwords básica si no se encuentra el archivo
+            self.stopList = {"a", "an", "and", "are", "as", "at", "be", "by", "for", "from", 
+                           "has", "he", "in", "is", "it", "its", "of", "on", "that", "the", 
+                           "to", "was", "were", "will", "with"}
 
     def removeStopWords(self, tokens):
         return [word for word in tokens if word not in self.stopList]  # Change 2: Stopword removal after lowercasing

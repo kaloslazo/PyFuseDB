@@ -93,14 +93,7 @@ Se tuvo especial cuidado en la presentación de los resultados de las consultas,
 
 #### 4.2.3 Método de Indexación
 La interfaz trae una opción para seleccionar el método de indexación a utilizar. Los usuarios pueden elegir entre `Implementación propia (Índice Invertido)`, `PostgreSQL` y `MongoDB`, permitiendo comparar los resultados obtenidos con cada técnica.
-
-#### 4.2.4 Carga de Archivos Multimedia
-Se implementó una funcionalidad para cargar imágenes y audio a la base de datos, permitiendo a los usuarios recuperar datos no estructurados. La lógica está compuesta por los siguientes pasos:
-
-- Un botón permite seleccionar los archivos a cargar.
-- Los archivos se procesan para extraer vectores característicos.
-- Los vectores se almacenan en la base de datos para su posterior recuperación.
-
+ 
 ### 4.3 Capturas de Pantalla
 
 ### 4.2 Análisis Comparativo de otras Implementaciones

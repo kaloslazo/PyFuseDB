@@ -1,0 +1,5 @@
+gradio==3.50.2
+emoji==2.14.0
+termcolor==2.5.0
+pandas==2.2.3
+nltk==3.9.1

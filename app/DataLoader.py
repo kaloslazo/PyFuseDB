@@ -131,7 +131,7 @@ class DataLoader:
             self.connection.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
             self.cursor = self.connection.cursor()
 
-            # Create the database if it doesn't exist
+            # Crear la base de datos si no existe
             self.cursor.execute(
                 sql.SQL("SELECT 1 FROM pg_database WHERE datname = %s"),
                 (self.db_name,)
@@ -142,7 +142,7 @@ class DataLoader:
             self.cursor.close()
             self.connection.close()
 
-            # Reconnect to the newly created database
+            # Reconectar a la base de datos recién creada
             self.connection = psycopg2.connect(
                 dbname=self.db_name,
                 user=self.user_name,
@@ -170,7 +170,7 @@ class DataLoader:
 
             self.cursor.execute("SELECT COUNT(*) FROM songs;")
             row_count = self.cursor.fetchone()[0]
-            return row_count == len(self.data)  # Verify index matches dataset size
+            return row_count == len(self.data)  # Verificar que el número de filas coincida
         except Exception as e:
             print(f"Error checking existing PostgreSQL index: {e}")
             return False
@@ -197,7 +197,7 @@ class DataLoader:
             )
             
             with open(self.dataPath, 'r') as f:
-                next(f)  # Skip header
+                next(f)  # header xd
                 self.cursor.copy_expert(
                     """
                     COPY songs(track_id, track_name, track_artist, lyrics, track_album_name, 

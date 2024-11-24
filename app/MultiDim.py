@@ -41,6 +41,7 @@ class SequentialKNN:
         results = sorted(results, key=lambda x: x[1])
         return results
 
+
 class RTreeKNN:
     def __init__(self, collection):
         self.collection_size = collection.shape[0]
@@ -82,3 +83,18 @@ class RTreeKNN:
         ]
 
         return sorted(results, lambda x: x[1])
+
+
+class FaissKNN:
+    def __init__(self, collection):
+        self.collection = collection
+        self.collection_size = collection.shape[0]
+        self.dim = collection.shape[1]
+        # TODO
+        # self.index = faiss.???
+
+    def knn_search(self, query, k=5):
+        pass
+
+    def range_search(self, query, radius=5):
+        pass

@@ -8,7 +8,8 @@ import traceback
 
 # => General data
 indexRetrievalChoices = ["Implementación Propia", "PostgreSQL", "MongoDB"]
-dataPath = "./app/data/afs/spotifySongsTextConcatenated.csv"
+#dataPath = "./app/data/afs/spotifySongsTextConcatenated.csv"
+dataPath = "data/afs/spotifySongsTextConcatenated.csv"
 
 # => General configuration
 sqlParser = SqlParser()
@@ -31,7 +32,10 @@ def createDemo(dataLoader=dataLoader, sqlParser=sqlParser):
     def updateResults(query, topK, retrievalModel):
         try:
             startTime = time.time()
-            queryResults = dataLoader.executeQuery(query, int(topK))
+            if retrievalModel == "Implementación Propia":
+                queryResults = dataLoader.executeQuery(query, int(topK))
+            elif retrievalModel == "PostgreSQL":
+                queryResults = dataLoader.executeQueryPostgreSQL(query, int(topK))
             executionTime = time.time() - startTime
             
             parsed_query = sqlParser.parseQuery(query)

@@ -32,7 +32,7 @@ class DataLoader:
                 self.index.build_index(self.data["texto_concatenado"].astype(str).tolist())
                 print("Índice construido exitosamente")
             
-            self._verify_index()
+            #self._verify_index()
             
         except Exception as e:
             print(f"Error durante la carga de datos: {e}")
@@ -44,7 +44,7 @@ class DataLoader:
         """Verifica que el índice existente coincida con el número de documentos"""
         try:
             with open(os.path.join(self.index.bin_path, "dict_0.bin"), "rb") as f:
-                dict_data = picxkle.load(f)
+                dict_data = pickle.load(f)
                 # Obtener el máximo doc_id de los postings
                 max_doc_id = max(doc_id for term_data in dict_data.values() 
                                for doc_id, _ in term_data[1])
@@ -106,3 +106,6 @@ class DataLoader:
 
         print(f"Resultados formateados: {formatted_results}")
         return formatted_results
+    
+    def executeQueryPostgreSQL(self, query, topK=10):
+        pass

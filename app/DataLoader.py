@@ -177,22 +177,31 @@ class DataLoader:
 
     def create_postgres_db(self):
         try:
-            print("Creating PostgreSQL table and inserting records...")
+            print("Creando la tabla PostgreSQL e insertando registros...")
             self.cursor.execute(
                 """
                 CREATE TABLE IF NOT EXISTS songs (
                     id SERIAL PRIMARY KEY,
+                    track_id TEXT,
                     track_name TEXT,
                     track_artist TEXT,
+                    lyrics TEXT,
+                    track_album_name TEXT,
+                    playlist_name TEXT,
+                    playlist_genre TEXT,
+                    playlist_subgenre TEXT,
+                    language TEXT,
                     texto_concatenado TEXT
                 );
                 """
             )
-            with open('data/afs/spotifySongsTextConcatenated.csv', 'r') as f:
-                next(f)  # Skip header row
+            
+            with open(self.dataPath, 'r') as f:
+                next(f)  # Skip header
                 self.cursor.copy_expert(
                     """
-                    COPY songs(track_name, track_artist, texto_concatenado) 
+                    COPY songs(track_id, track_name, track_artist, lyrics, track_album_name, 
+                            playlist_name, playlist_genre, playlist_subgenre, language, texto_concatenado)
                     FROM STDIN WITH CSV HEADER;
                     """, f
                 )
@@ -200,15 +209,17 @@ class DataLoader:
             self.cursor.execute(
                 "CREATE INDEX IF NOT EXISTS songs_text_idx ON songs USING gin(to_tsvector('english', texto_concatenado));"
             )
+
             self.connection.commit()
-            print("PostgreSQL table and inverted index created successfully.")
+            print("Tabla y índice PostgreSQL creados exitosamente.")
         except Exception as e:
-            print(f"Error creating PostgreSQL database or index: {e}")
+            print(f"Error creando la base de datos o índice de PostgreSQL: {e}")
             self.connection.rollback()
+
 
     def executeQueryPostgreSQL(self, query, topK=10):
         try:
-            print(f"Executing PostgreSQL query: {query}")
+            print(f"Ejecutando PostgreSQL query: {query}")
             self.cursor.execute(query)
             results = self.cursor.fetchall()
 
@@ -217,9 +228,9 @@ class DataLoader:
                 for row, score in zip(results, [1.0] * len(results))[:topK]
             ]
 
-            print(f"PostgreSQL Results: {formatted_results}")
+            print(f"PostgreSQL resultados: {formatted_results}")
             return formatted_results
         except Exception as e:
-            print(f"Error executing PostgreSQL query: {e}")
+            print(f"Error ejecutando PostgreSQL query: {e}")
             return []
 

@@ -44,7 +44,7 @@ def createDemo(dataLoader=dataLoader, sqlParser=sqlParser):
             # Parsea la consulta SQL
             parsed_query = sqlParser.parseQuery(query)
             fields = parsed_query['fields']
-            if '*' in fields:  # Si se seleccionan todos los campos
+            if '*' in fields:
                 fields = list(dataLoader.data.columns)
 
             if not queryResults:

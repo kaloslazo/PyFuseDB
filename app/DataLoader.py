@@ -332,6 +332,9 @@ class DataLoader:
 
         except Exception as e:
             print(f"Error ejecutando PostgreSQL query: {e}")
+            # Rollback transaction to reset the cursor state
+            self.connection.rollback()
             return []
+
 
 

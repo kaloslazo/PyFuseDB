@@ -41,17 +41,15 @@ def createDemo(dataLoader=dataLoader, sqlParser=sqlParser):
 
             executionTime = time.time() - startTime
 
-            # Parse the query to get selected fields
+            # Parsea la consulta SQL
             parsed_query = sqlParser.parseQuery(query)
             fields = parsed_query['fields']
-            if '*' in fields:  # Retrieve all columns if wildcard used
+            if '*' in fields:  # Si se seleccionan todos los campos
                 fields = list(dataLoader.data.columns)
 
-            # Check if results exist
             if not queryResults:
                 return None, f"No se encontraron resultados. Tiempo: {executionTime:.2f} segundos"
 
-            # Format results into a DataFrame
             df = pd.DataFrame(queryResults, columns=fields + ['Relevancia (%)'])
             return df, f"Tiempo: {executionTime:.2f} segundos"
         except Exception as e:

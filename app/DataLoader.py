@@ -9,7 +9,7 @@ from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 import traceback
 
 class DataLoader:
-    def __init__(self, dataPath, db_name='spotify_songs', user_name='your_user', password='your_password'):
+    def __init__(self, dataPath, db_name='spotify_songs', user_name='postgres', password='123'):
         self.dataPath = dataPath
         self.data = None
         self.db_name = db_name
@@ -21,7 +21,7 @@ class DataLoader:
         self.sqlParser = SqlParser()
 
         print("DataLoader inicializado.")
-        # Establish PostgreSQL connection
+        # Conexion a la base de datos de PostgreSQL
         self._initialize_postgres_connection()
 
     def loadData(self):
@@ -131,7 +131,7 @@ class DataLoader:
             self.connection.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
             self.cursor = self.connection.cursor()
 
-            # Create the database if it doesn't exist
+            # Crear la base de datos si no existe
             self.cursor.execute(
                 sql.SQL("SELECT 1 FROM pg_database WHERE datname = %s"),
                 (self.db_name,)
@@ -142,7 +142,7 @@ class DataLoader:
             self.cursor.close()
             self.connection.close()
 
-            # Reconnect to the newly created database
+            # Reconectar a la base de datos recién creada
             self.connection = psycopg2.connect(
                 dbname=self.db_name,
                 user=self.user_name,
@@ -170,7 +170,7 @@ class DataLoader:
 
             self.cursor.execute("SELECT COUNT(*) FROM songs;")
             row_count = self.cursor.fetchone()[0]
-            return row_count == len(self.data)  # Verify index matches dataset size
+            return row_count == len(self.data)  # Verificar que el número de filas coincida
         except Exception as e:
             print(f"Error checking existing PostgreSQL index: {e}")
             return False
@@ -197,7 +197,7 @@ class DataLoader:
             )
             
             with open(self.dataPath, 'r') as f:
-                next(f)  # Skip header
+                next(f)  # header xd
                 self.cursor.copy_expert(
                     """
                     COPY songs(track_id, track_name, track_artist, lyrics, track_album_name, 
@@ -223,14 +223,19 @@ class DataLoader:
             self.cursor.execute(query)
             results = self.cursor.fetchall()
 
+            # Limitar los resultados a topK
+            sliced_results = results[:topK]
+
+            # Formatear los resultados como una lista de listas
             formatted_results = [
-                [str(col) for col in row[:2]] + [f"{score * 100:.2f}"]
-                for row, score in zip(results, [1.0] * len(results))[:topK]
+                [str(col) for col in row] + [f"{100.0:.2f}"] for row in sliced_results
             ]
 
             print(f"PostgreSQL resultados: {formatted_results}")
             return formatted_results
+
         except Exception as e:
             print(f"Error ejecutando PostgreSQL query: {e}")
             return []
+
 

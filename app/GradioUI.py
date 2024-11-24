@@ -8,7 +8,6 @@ import traceback
 
 # => General data
 indexRetrievalChoices = ["Implementación Propia", "PostgreSQL", "MongoDB"]
-#dataPath = "./app/data/afs/spotifySongsTextConcatenated.csv"
 dataPath = "data/afs/spotifySongsTextConcatenated.csv"
 
 # => General configuration

@@ -131,6 +131,92 @@ class DataLoader:
             self.connection.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
             self.cursor = self.connection.cursor()
 
+            # Create the database if it doesn't exist
+            self.cursor.execute(
+                sql.SQL("SELECT 1 FROM pg_database WHERE datname = %s"),
+                (self.db_name,)
+            )
+            if not self.cursor.fetchone():
+                print(f"Database {self.db_name} does not exist. Creating...")
+                self.cursor.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(self.db_name)))
+            self.cursor.close()
+            self.connection.close()
+
+            # Reconnect to the newly created database
+            self.connection = psycopg2.connect(
+                dbname=self.db_name,
+                user=self.user_name,
+                password=self.password
+            )
+            self.cursor = self.connection.cursor()
+        except Exception as e:
+            print(f"Error initializing PostgreSQL connection: {e}")
+            import traceback
+            print(traceback.format_exc())
+
+    def _check_existing_index_postgres(self):
+        try:
+            self.cursor.execute(
+                """
+                SELECT EXISTS (
+                    SELECT FROM information_schema.tables 
+                    WHERE table_name = 'songs'
+                );
+                """
+            )
+            table_exists = self.cursor.fetchone()[0]
+            if not table_exists:
+                return False
+
+            self.cursor.execute("SELECT COUNT(*) FROM songs;")
+            row_count = self.cursor.fetchone()[0]
+            return row_count == len(self.data)  # Verify index matches dataset size
+        except Exception as e:
+            print(f"Error checking existing PostgreSQL index: {e}")
+            return False
+
+    def create_postgres_db(self):
+        try:
+            print("Creating PostgreSQL table and inserting records...")
+            self.cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS songs (
+                    id SERIAL PRIMARY KEY,
+                    track_name TEXT,
+                    track_artist TEXT,
+                    texto_concatenado TEXT
+                );
+                """
+            )
+            with open('data/afs/spotifySongsTextConcatenated.csv', 'r') as f:
+                next(f)  # Skip header row
+                self.cursor.copy_expert(
+                    """
+                    COPY songs(track_name, track_artist, texto_concatenado) 
+                    FROM STDIN WITH CSV HEADER;
+                    """, f
+                )
+
+            self.cursor.execute(
+                "CREATE INDEX IF NOT EXISTS songs_text_idx ON songs USING gin(to_tsvector('english', texto_concatenado));"
+            )
+            self.connection.commit()
+            print("PostgreSQL table and inverted index created successfully.")
+        except Exception as e:
+            print(f"Error creating PostgreSQL database or index: {e}")
+            self.connection.rollback()
+
+
+    def _initialize_postgres_connection(self):
+        try:
+            self.connection = psycopg2.connect(
+                dbname='postgres',
+                user=self.user_name,
+                password=self.password
+            )
+            self.connection.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
+            self.cursor = self.connection.cursor()
+
             # Crear la base de datos si no existe
             self.cursor.execute(
                 sql.SQL("SELECT 1 FROM pg_database WHERE datname = %s"),

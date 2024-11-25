@@ -31,7 +31,7 @@ def createDemo(dataLoader=dataLoader, sqlParser=sqlParser):
     def updateResults(query, topK, retrievalModel):
         try:
             startTime = time.time()
-            
+
             if retrievalModel == "Implementación Propia":
                 queryResults = dataLoader.executeQuery(query, int(topK))
             elif retrievalModel == "PostgreSQL":
@@ -62,7 +62,7 @@ def createDemo(dataLoader=dataLoader, sqlParser=sqlParser):
         with gr.Column(scale=1):
             gr.Markdown("# 🐍 PyFuseDB", elem_classes="header")
             gr.Markdown("Sistema que integra varios modelos de datos y técnicas avanzadas de recuperación de información.", elem_classes="subtitle")
-            
+
             with gr.Tab("Parte 1: Índice Invertido"):
                 with gr.Column():
                     gr.Markdown("## Consulta", elem_classes="section-title")
@@ -71,7 +71,7 @@ def createDemo(dataLoader=dataLoader, sqlParser=sqlParser):
                             query_input = gr.Textbox(
                                 lines=3,
                                 label="Consulta SQL",
-                                placeholder="SELECT artist,song,lyrics FROM songs LIKE love music",
+                                placeholder="SELECT track_artist,track_name,lyrics FROM songs LIKE love music",
                                 elem_classes="query-input"
                             )
                         with gr.Column(scale=1):
@@ -87,12 +87,12 @@ def createDemo(dataLoader=dataLoader, sqlParser=sqlParser):
                                 choices=indexRetrievalChoices,
                                 value=indexRetrievalChoices[0]
                             )
-                    
+
                     search_button = gr.Button(
                         "Ejecutar búsqueda",
                         variant="primary"
                     )
-                    
+
                     gr.Markdown("## Resultados")
                     results_df = gr.Dataframe(
                         headers=None,
@@ -102,10 +102,10 @@ def createDemo(dataLoader=dataLoader, sqlParser=sqlParser):
                         max_rows=10
                     )
                     execution_time = gr.Markdown()
-            
+
             with gr.Tab("Parte 2: Índice Multidimensional"):
                 gr.Markdown("## En desarrollo")
-            
+
             search_button.click(
                 fn=updateResults,
                 inputs=[query_input, top_k, model],

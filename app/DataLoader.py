@@ -202,8 +202,118 @@ class DataLoader:
                 );
                 """
             )
+            
+            with open(self.dataPath, 'r') as f:
+                next(f)  # header xd
+                self.cursor.copy_expert(
+                    """
+                    COPY songs(track_id, track_name, track_artist, lyrics, track_album_name, 
+                            playlist_name, playlist_genre, playlist_subgenre, language, texto_concatenado)
+                    FROM STDIN WITH CSV HEADER;
+                    """, f
+                )
 
-            with open(self.dataPath, 'r', encoding="utf-8" ) as f:
+            self.cursor.execute(
+                "CREATE INDEX IF NOT EXISTS songs_text_idx ON songs USING gin(to_tsvector('english', texto_concatenado));"
+            )
+
+            self.connection.commit()
+            print("Tabla y índice PostgreSQL creados exitosamente.")
+        except Exception as e:
+            print(f"Error creando la base de datos o índice de PostgreSQL: {e}")
+            self.connection.rollback()
+
+
+    def _initialize_postgres_connection(self):
+        try:
+            self.connection = psycopg2.connect(
+                dbname='postgres',
+                user=self.user_name,
+                password=self.password
+            )
+            self.connection.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
+            self.cursor = self.connection.cursor()
+
+            # Crear la base de datos si no existe
+            self.cursor.execute(
+                sql.SQL("SELECT 1 FROM pg_database WHERE datname = %s"),
+                (self.db_name,)
+            )
+            if not self.cursor.fetchone():
+                print(f"Database {self.db_name} does not exist. Creating...")
+                self.cursor.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(self.db_name)))
+            self.cursor.close()
+            self.connection.close()
+
+            # Reconectar a la base de datos recién creada
+            self.connection = psycopg2.connect(
+                dbname=self.db_name,
+                user=self.user_name,
+                password=self.password
+            )
+            self.cursor = self.connection.cursor()
+        except Exception as e:
+            print(f"Error initializing PostgreSQL connection: {e}")
+            import traceback
+            print(traceback.format_exc())
+
+    def _check_existing_index_postgres(self):
+        try:
+            print("Verificando existencia de la tabla 'songs' en PostgreSQL...")
+            self.cursor.execute(
+                """
+                SELECT EXISTS (
+                    SELECT FROM information_schema.tables 
+                    WHERE table_schema = 'public' AND table_name = 'songs'
+                );
+                """
+            )
+            table_exists = self.cursor.fetchone()[0]
+            if not table_exists:
+                print("La tabla 'songs' no existe en la base de datos.")
+                return False
+
+            print("La tabla 'songs' existe. Verificando el número de filas...")
+
+            self.cursor.execute("SELECT COUNT(*) FROM songs;")
+            row_count = self.cursor.fetchone()[0]
+
+            if row_count == 0:
+                print("La tabla 'songs' está vacía.")
+                return False
+
+            print(f"La tabla 'songs' contiene {row_count} filas.")
+            return True
+
+        except Exception as e:
+            print(f"Error al verificar la tabla 'songs': {e}")
+            return False
+
+
+
+    def create_postgres_db(self):
+        try:
+            print("Creando la tabla PostgreSQL e insertando registros...")
+            self.cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS songs (
+                    id SERIAL PRIMARY KEY,
+                    track_id TEXT,
+                    track_name TEXT,
+                    track_artist TEXT,
+                    lyrics TEXT,
+                    track_album_name TEXT,
+                    playlist_name TEXT,
+                    playlist_genre TEXT,
+                    playlist_subgenre TEXT,
+                    language TEXT,
+                    texto_concatenado TEXT
+                );
+                """
+            )
+            
+            with open(self.dataPath, 'r') as f:
+                next(f)  # header xd
                 self.cursor.copy_expert(
                     """
                     COPY songs(track_id, track_name, track_artist, lyrics, track_album_name,

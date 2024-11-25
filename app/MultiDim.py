@@ -1,4 +1,8 @@
 import numpy as np
+from tensorflow.keras.applications.resnet50 import ResNet50, preprocess_input
+from tensorflow.keras.models import Model
+from tensorflow.keras.preprocessing.image import img_to_array, load_img
+import os
 from rtree import index
 import heapq
 
@@ -96,5 +100,32 @@ class FaissKNN:
     def knn_search(self, query, k=5):
         pass
 
-    def range_search(self, query, radius=5):
-        pass
+def extract_feature_vector(image_path, model = Model ):
+    """Extract a feature vector from an image using a CNN."""
+    img = load_img(image_path, target_size=(224, 224))
+    img_array = img_to_array(img)
+    img_array = np.expand_dims(img_array, axis=0)
+    img_array = preprocess_input(img_array)
+
+    features = model.predict(img_array)
+    return features.flatten()
+
+
+def build_vector_collection(image_folder):
+    """Build a collection of feature vectors for a folder of images."""
+    base_model = ResNet50(weights="imagenet", include_top=False, pooling="avg")
+    collection = []
+    image_files = [
+        os.path.join(image_folder, f)
+        for f in os.listdir(image_folder)
+        if f.lower().endswith(('.png', '.jpg', '.jpeg'))
+    ]
+
+    for image_path in image_files:
+        try:
+            feature_vector = extract_feature_vector(image_path, base_model)
+            collection.append(feature_vector)
+        except Exception as e:
+            print(f"Error processing {image_path}: {e}")
+
+    return np.array(collection)

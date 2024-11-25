@@ -6,10 +6,13 @@ from InvertedIndex import InvertedIndex
 import psycopg2
 from psycopg2 import sql
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
+from dotenv import load_dotenv
 import traceback
 
+load_dotenv()
+
 class DataLoader:
-    def __init__(self, dataPath, db_name='spotify_songs', user_name='postgres', password='123'):
+    def __init__(self, dataPath, db_name='spotify_songs', user_name=os.getenv("DB_USER"), password=os.getenv("DB_PASSWORD")):
         self.dataPath = dataPath
         self.data = None
         self.db_name = db_name
@@ -29,7 +32,7 @@ class DataLoader:
         try:
             self.data = pd.read_csv(self.dataPath)
             print(f"Dataset cargado exitosamente.\nColumnas: {self.data.columns}\nFilas: {len(self.data)}")
-            
+
             # Forzar reconstrucción del índice si los documentos han cambiado
             if self._check_existing_index() and self._verify_index_size():
                 print("Cargando índice existente en memoria...")
@@ -47,7 +50,7 @@ class DataLoader:
                 self.create_postgres_db()
             else:
                 print("PostgreSQL database and index already exist. Verificado exitosamente.")
-                
+
         except Exception as e:
             print(f"Error durante la carga de datos: {e}")
             print("Stacktrace:")
@@ -60,7 +63,7 @@ class DataLoader:
             with open(os.path.join(self.index.bin_path, "dict_0.bin"), "rb") as f:
                 dict_data = pickle.load(f)
                 # Obtener el máximo doc_id de los postings
-                max_doc_id = max(doc_id for term_data in dict_data.values() 
+                max_doc_id = max(doc_id for term_data in dict_data.values()
                                for doc_id, _ in term_data[1])
                 # Verificar que coincida con el número de documentos
                 return max_doc_id + 1 == len(self.data)
@@ -85,7 +88,7 @@ class DataLoader:
             self.index.doc_count = len(self.data)
             print(f"Índice cargado con {len(self.index.main_dictionary)} términos")
             print("Muestra de términos:", list(self.index.main_dictionary.keys())[:5])
-            
+
         except Exception as e:
             print(f"Error cargando índice existente: {e}")
             print("Reconstruyendo índice...")
@@ -159,7 +162,7 @@ class DataLoader:
             self.cursor.execute(
                 """
                 SELECT EXISTS (
-                    SELECT FROM information_schema.tables 
+                    SELECT FROM information_schema.tables
                     WHERE table_name = 'songs'
                 );
                 """
@@ -195,12 +198,12 @@ class DataLoader:
                 );
                 """
             )
-            
+
             with open(self.dataPath, 'r') as f:
                 next(f)  # header xd
                 self.cursor.copy_expert(
                     """
-                    COPY songs(track_id, track_name, track_artist, lyrics, track_album_name, 
+                    COPY songs(track_id, track_name, track_artist, lyrics, track_album_name,
                             playlist_name, playlist_genre, playlist_subgenre, language, texto_concatenado)
                     FROM STDIN WITH CSV HEADER;
                     """, f
@@ -255,7 +258,7 @@ class DataLoader:
             self.cursor.execute(
                 """
                 SELECT EXISTS (
-                    SELECT FROM information_schema.tables 
+                    SELECT FROM information_schema.tables
                     WHERE table_name = 'songs'
                 );
                 """
@@ -291,12 +294,12 @@ class DataLoader:
                 );
                 """
             )
-            
+
             with open(self.dataPath, 'r') as f:
                 next(f)  # header xd
                 self.cursor.copy_expert(
                     """
-                    COPY songs(track_id, track_name, track_artist, lyrics, track_album_name, 
+                    COPY songs(track_id, track_name, track_artist, lyrics, track_album_name,
                             playlist_name, playlist_genre, playlist_subgenre, language, texto_concatenado)
                     FROM STDIN WITH CSV HEADER;
                     """, f
@@ -335,6 +338,3 @@ class DataLoader:
             # Rollback transaction to reset the cursor state
             self.connection.rollback()
             return []
-
-
-

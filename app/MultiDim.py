@@ -49,6 +49,7 @@ class SequentialKNN:
 class RTreeKNN:
     def __init__(self, collection):
         self.collection_size = collection.shape[0]
+        self.collection = collection
         p = index.Property()
         p.dimension = collection.shape[1]
         self.index = index.Index(properties=p)
@@ -60,33 +61,36 @@ class RTreeKNN:
 
 
     def knn_search(self, query, k=5):
-        query = tuple(query[0])
-        bounding_box = query + query
+        np_query = np.array(query)
+        tuple_query = tuple(np_query)
+
+        bounding_box = tuple_query + tuple_query
         nearest_neighbors = list(self.index.nearest(bounding_box, k))
 
-        results = [(i, euclidean(np.array(query), np.array(self.index.get(i)))) for i in nearest_neighbors]
+        results = [(i, euclidean(np_query, self.collection[i])) for i in nearest_neighbors]
         return sorted(results, key = lambda x: x[1])
 
 
     def range_search(self, query, radius=5):
-        query = tuple(query[0])
+        np_query = np.array(query)
+        tuple_query = tuple(np_query)
 
         # bounding box al rededeor de la query, de size = radius
         bounding_box = tuple(
             coord - radius if i % 2 == 0 else coord + radius
-            for i, coord in enumerate(query * 2)
+            for i, coord in enumerate(tuple_query * 2)
         )
 
         candidates = list(self.index.intersection(bounding_box))
 
         # filtrar los candidatos con ed > radius
         results = [
-            (i, euclidean(np.array(query), np.array(self.index.get(i))))
+            (i, euclidean(np_query, self.collection[i]))
             for i in candidates
-            if euclidean(np.array(query), np.array(self.index.get(i))) <= radius
+            if euclidean(np_query, self.collection[i]) <= radius
         ]
 
-        return sorted(results, lambda x: x[1])
+        return sorted(results, key = lambda x: x[1])
 
 
 class FaissKNN:

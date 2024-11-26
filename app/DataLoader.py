@@ -129,7 +129,8 @@ class DataLoader:
             self.connection = psycopg2.connect(
                 dbname='postgres',
                 user=self.user_name,
-                password=self.password
+                password=self.password,
+                host='127.0.0.1'
             )
             self.connection.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
             self.cursor = self.connection.cursor()
@@ -149,7 +150,8 @@ class DataLoader:
             self.connection = psycopg2.connect(
                 dbname=self.db_name,
                 user=self.user_name,
-                password=self.password
+                password=self.password,
+                host='127.0.0.1'
             )
             self.cursor = self.connection.cursor()
         except Exception as e:
@@ -225,7 +227,8 @@ class DataLoader:
             self.connection = psycopg2.connect(
                 dbname='postgres',
                 user=self.user_name,
-                password=self.password
+                password=self.password,
+                host='127.0.0.1'
             )
             self.connection.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
             self.cursor = self.connection.cursor()
@@ -245,7 +248,8 @@ class DataLoader:
             self.connection = psycopg2.connect(
                 dbname=self.db_name,
                 user=self.user_name,
-                password=self.password
+                password=self.password,
+                host='127.0.0.1'
             )
             self.cursor = self.connection.cursor()
         except Exception as e:

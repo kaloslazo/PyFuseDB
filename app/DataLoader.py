@@ -8,6 +8,7 @@ from psycopg2 import sql
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 from dotenv import load_dotenv
 import traceback
+import time
 
 load_dotenv()
 
@@ -244,3 +245,112 @@ class DataLoader:
             # Rollback transaction to reset the cursor state
             self.connection.rollback()
             return []
+        
+    def experiment(self, query, topK=8):
+        with open("reporte.txt", "w") as report_file:
+            for N in [1000, 2000, 4000, 8000, 16000, 32000, 64000]:
+                report_file.write(f">>>>>>>>>>>>>>>>>>>>>>>>>>> Experimento con N={N}\n")
+                print(f">>>>>>>>>>>>>>>>>>>>>>>>>>> Experimento con N={N}")
+                
+                # Limpiar archivos antiguos
+                folder_path = "app/data/bin"
+                for filename in os.listdir(folder_path):
+                    file_path = os.path.join(folder_path, filename)
+                    if os.path.isfile(file_path):
+                        try:
+                            os.remove(file_path)
+                        except Exception as e:
+                            print(f"Error al eliminar {filename}: {e}")
+
+                # Construir un índice con N documentos
+                report_file.write(">>>>>>>>>>>> Indice invertido: \n")
+                print(">>>>>>>>>>>> Indice invertido: ")
+                self.index.clear_files()
+                #
+                if N < 18000:
+                    self.data = pd.read_csv(self.dataPath)[:N]
+                elif N < 36000:
+                    self.data = pd.concat([pd.read_csv(self.dataPath)] * 2, ignore_index=True)[:N]
+                else:
+                    self.data = pd.concat([pd.read_csv(self.dataPath)] * 4, ignore_index=True)[:N]
+            
+                
+                self.index.build_index(self.data["texto_concatenado"].astype(str).tolist())
+
+                # Ejecutar la consulta en el índice
+                start = time.time()
+                queryInvert = self.sqlParser.parseQuery(query)
+                like_term = queryInvert['like_term']
+                results = self.index.search(like_term, topK)
+                end = time.time()
+                time_taken = end - start
+                report_file.write(f"Consulta ejecutada en {time_taken:.2f} segundos en el índice invertido\n")
+                print(f"Consulta ejecutada en {time_taken:.2f} segundos en el índice invertido")
+
+                # Ejecutar la consulta en PostgreSQL
+                report_file.write(">>>>>>>>>>>> PostgreSQL: \n")
+                print(">>>>>>>>>>>> PostgreSQL: ")
+                try:
+                    self.cursor.execute("DROP TABLE IF EXISTS songs;")
+                    
+                    self.cursor.execute(
+                        """
+                        CREATE TABLE IF NOT EXISTS songs (
+                            id SERIAL PRIMARY KEY,
+                            track_id TEXT,
+                            track_name TEXT,
+                            track_artist TEXT,
+                            lyrics TEXT,
+                            track_album_name TEXT,
+                            playlist_name TEXT,
+                            playlist_genre TEXT,
+                            playlist_subgenre TEXT,
+                            language TEXT,
+                            texto_concatenado TEXT
+                        );
+                        """
+                    )
+
+                    # Abrir el archivo CSV
+                    with open(self.dataPath, 'r', encoding="utf-8") as f:
+                        next(f)  # Saltar el encabezado
+                        lines = [next(f) for _ in range(min(N, 18000))]
+
+                        if(N>18000 and N < 36000):
+                            lines = lines *2 
+                            lines = lines[:N]
+                        elif(N > 36000):
+                            lines = lines + lines * 4
+                            lines = lines[:N]                        
+                        
+                        # Copiar las primeras N tuplas al DB
+                        from io import StringIO
+                        temp_file = StringIO(''.join(lines))
+
+                        self.cursor.copy_expert(
+                            """
+                            COPY songs(track_id, track_name, track_artist, lyrics, track_album_name,
+                                    playlist_name, playlist_genre, playlist_subgenre, language, texto_concatenado)
+                            FROM STDIN WITH CSV HEADER;
+                            """, temp_file
+                        )
+
+                    # Crear el índice para la columna texto_concatenado
+                    self.cursor.execute(
+                        "CREATE INDEX IF NOT EXISTS songs_text_idx ON songs USING gin(to_tsvector('english', texto_concatenado));"
+                    )
+                    self.connection.commit()
+
+                    start = time.time()
+                    queryPostgres = self.sqlParser.parseQueryPostgres(query)
+                    self.cursor.execute(queryPostgres)
+                    results = self.cursor.fetchall()
+                    end = time.time()
+                    time_taken = end - start
+                    report_file.write(f"Consulta ejecutada en {time_taken:.2f} segundos en PostgreSQL\n")
+                    print(f"Consulta ejecutada en {time_taken:.2f} segundos en PostgreSQL")
+                except Exception as e:
+                    error_message = f"Error al ejecutar la consulta en PostgreSQL: {e}"
+                    report_file.write(error_message + "\n")
+                    print(error_message)
+

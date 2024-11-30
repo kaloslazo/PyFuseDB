@@ -175,6 +175,7 @@ class DataLoader:
 
             self.cursor.execute("SELECT COUNT(*) FROM songs;")
             row_count = self.cursor.fetchone()[0]
+            #print("lens: ", row_count, len(self.data))
             return row_count == len(self.data)  # Verificar que el número de filas coincida
         except Exception as e:
             print(f"Error checking existing PostgreSQL index: {e}")
@@ -201,8 +202,7 @@ class DataLoader:
                 """
             )
 
-            with open(self.dataPath, 'r') as f:
-                next(f)  # header xd
+            with open(self.dataPath, 'r', encoding="utf-8" ) as f:
                 self.cursor.copy_expert(
                     """
                     COPY songs(track_id, track_name, track_artist, lyrics, track_album_name,
@@ -220,108 +220,10 @@ class DataLoader:
         except Exception as e:
             print(f"Error creando la base de datos o índice de PostgreSQL: {e}")
             self.connection.rollback()
-
-
-    def _initialize_postgres_connection(self):
-        try:
-            self.connection = psycopg2.connect(
-                dbname='postgres',
-                user=self.user_name,
-                password=self.password,
-                host='127.0.0.1'
-            )
-            self.connection.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
-            self.cursor = self.connection.cursor()
-
-            # Crear la base de datos si no existe
-            self.cursor.execute(
-                sql.SQL("SELECT 1 FROM pg_database WHERE datname = %s"),
-                (self.db_name,)
-            )
-            if not self.cursor.fetchone():
-                print(f"Database {self.db_name} does not exist. Creating...")
-                self.cursor.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(self.db_name)))
-            self.cursor.close()
-            self.connection.close()
-
-            # Reconectar a la base de datos recién creada
-            self.connection = psycopg2.connect(
-                dbname=self.db_name,
-                user=self.user_name,
-                password=self.password,
-                host='127.0.0.1'
-            )
-            self.cursor = self.connection.cursor()
-        except Exception as e:
-            print(f"Error initializing PostgreSQL connection: {e}")
-            import traceback
-            print(traceback.format_exc())
-
-    def _check_existing_index_postgres(self):
-        try:
-            self.cursor.execute(
-                """
-                SELECT EXISTS (
-                    SELECT FROM information_schema.tables
-                    WHERE table_name = 'songs'
-                );
-                """
-            )
-            table_exists = self.cursor.fetchone()[0]
-            if not table_exists:
-                return False
-
-            self.cursor.execute("SELECT COUNT(*) FROM songs;")
-            row_count = self.cursor.fetchone()[0]
-            return row_count == len(self.data)  # Verificar que el número de filas coincida
-        except Exception as e:
-            print(f"Error checking existing PostgreSQL index: {e}")
-            return False
-
-    def create_postgres_db(self):
-        try:
-            print("Creando la tabla PostgreSQL e insertando registros...")
-            self.cursor.execute(
-                """
-                CREATE TABLE IF NOT EXISTS songs (
-                    id SERIAL PRIMARY KEY,
-                    track_id TEXT,
-                    track_name TEXT,
-                    track_artist TEXT,
-                    lyrics TEXT,
-                    track_album_name TEXT,
-                    playlist_name TEXT,
-                    playlist_genre TEXT,
-                    playlist_subgenre TEXT,
-                    language TEXT,
-                    texto_concatenado TEXT
-                );
-                """
-            )
-
-            with open(self.dataPath, 'r') as f:
-                next(f)  # header xd
-                self.cursor.copy_expert(
-                    """
-                    COPY songs(track_id, track_name, track_artist, lyrics, track_album_name,
-                            playlist_name, playlist_genre, playlist_subgenre, language, texto_concatenado)
-                    FROM STDIN WITH CSV HEADER;
-                    """, f
-                )
-
-            self.cursor.execute(
-                "CREATE INDEX IF NOT EXISTS songs_text_idx ON songs USING gin(to_tsvector('english', texto_concatenado));"
-            )
-
-            self.connection.commit()
-            print("Tabla y índice PostgreSQL creados exitosamente.")
-        except Exception as e:
-            print(f"Error creando la base de datos o índice de PostgreSQL: {e}")
-            self.connection.rollback()
-
 
     def executeQueryPostgreSQL(self, query, topK=10):
         try:
+            query = self.sqlParser.parseQueryPostgres(query)
             print(f"Ejecutando PostgreSQL query: {query}")
             self.cursor.execute(query)
             results = self.cursor.fetchall()

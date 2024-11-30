@@ -5,6 +5,7 @@ from tensorflow.keras.preprocessing.image import img_to_array, load_img
 import os
 from rtree import index
 import heapq
+import faiss
 
 def euclidean(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     return np.linalg.norm(a - b)
@@ -98,11 +99,15 @@ class FaissKNN:
         self.collection = collection
         self.collection_size = collection.shape[0]
         self.dim = collection.shape[1]
-        # TODO
-        # self.index = faiss.???
+        self.index = faiss.IndexHNSWFlat(self.dim, 32)
+        self.index.add(self.collection)
 
     def knn_search(self, query, k=5):
-        pass
+        if query.shape[0] != self.dim:
+            raise ValueError(f"Dimensión del query ({query.shape[0]}) no coincide con la colección ({self.dim})")
+        query = query.astype('float32').reshape(1, -1)
+        distances, indices = self.index.search(query, k)
+        return [(int(i), float(d)) for i, d in zip(indices[0], distances[0])]
 
 def extract_feature_vector(image_path, model = Model ):
     """Extract a feature vector from an image using a CNN."""

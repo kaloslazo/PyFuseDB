@@ -1,12 +1,30 @@
-import numpy as np
-from tensorflow.keras.applications.resnet50 import ResNet50, preprocess_input
-from tensorflow.keras.models import Model
-from tensorflow.keras.preprocessing.image import img_to_array, load_img
 import os
+import numpy as np
+import torch
+import torch.nn as nn
+from torchvision import models, transforms
+from PIL import Image
+from sklearn.manifold import TSNE
+import matplotlib.pyplot as plt
 from rtree import index
 import heapq
+import faiss
 
-def euclidean(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+# --------------------------------
+# Model and Preprocessing
+# --------------------------------
+
+base_model = models.resnet50(pretrained=True)
+model = nn.Sequential(*list(base_model.children())[:-1]).eval()
+
+transform = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+])
+
+
+def distance_metric(a: np.ndarray, b: np.ndarray):
     return np.linalg.norm(a - b)
 
 
@@ -20,7 +38,7 @@ class SequentialKNN:
         max_heap = []
 
         for i in range(self.collection_size):
-            dist = euclidean(query, self.collection[i])
+            dist = distance_metric(query, self.collection[i])
 
             if len(max_heap) < k:
                 heapq.heappush(max_heap, (-dist, i))
@@ -37,7 +55,7 @@ class SequentialKNN:
         results = []
 
         for i in range(self.collection_size):
-            dist = euclidean(query, self.collection[i])
+            dist = distance_metric(query, self.collection[i])
 
             if dist <= radius:
                 results.append((i, dist))
@@ -67,7 +85,7 @@ class RTreeKNN:
         bounding_box = tuple_query + tuple_query
         nearest_neighbors = list(self.index.nearest(bounding_box, k))
 
-        results = [(i, euclidean(np_query, self.collection[i])) for i in nearest_neighbors]
+        results = [(i, distance_metric(np_query, self.collection[i])) for i in nearest_neighbors]
         return sorted(results, key = lambda x: x[1])
 
 
@@ -85,9 +103,9 @@ class RTreeKNN:
 
         # filtrar los candidatos con ed > radius
         results = [
-            (i, euclidean(np_query, self.collection[i]))
+            (i, distance_metric(np_query, self.collection[i]))
             for i in candidates
-            if euclidean(np_query, self.collection[i]) <= radius
+            if distance_metric(np_query, self.collection[i]) <= radius
         ]
 
         return sorted(results, key = lambda x: x[1])
@@ -98,38 +116,153 @@ class FaissKNN:
         self.collection = collection
         self.collection_size = collection.shape[0]
         self.dim = collection.shape[1]
-        # TODO
-        # self.index = faiss.???
+        self.index = faiss.IndexHNSWFlat(self.dim, 32)
+        self.index.add(self.collection)
 
     def knn_search(self, query, k=5):
-        pass
-
-def extract_feature_vector(image_path, model = Model ):
-    """Extract a feature vector from an image using a CNN."""
-    img = load_img(image_path, target_size=(224, 224))
-    img_array = img_to_array(img)
-    img_array = np.expand_dims(img_array, axis=0)
-    img_array = preprocess_input(img_array)
-
-    features = model.predict(img_array)
-    return features.flatten()
+        if query.shape[0] != self.dim:
+            raise ValueError(f"Dimensión del query ({query.shape[0]}) no coincide con la colección ({self.dim})")
+        query = query.astype('float32').reshape(1, -1)
+        distances, indices = self.index.search(query, k)
+        return [(int(i), float(d)) for i, d in zip(indices[0], distances[0])]
 
 
-def build_vector_collection(image_folder):
-    """Build a collection of feature vectors for a folder of images."""
-    base_model = ResNet50(weights="imagenet", include_top=False, pooling="avg")
+
+# --------------------------------
+# Feature Extraction
+# --------------------------------
+
+def extract_feature_vector(image_path):
+    """
+    Extract feature vector from an image using ResNet50.
+    Args:
+        image_path (str): Path to the image.
+    Returns:
+        torch.Tensor: Feature vector.
+    """
+    img = Image.open(image_path).convert("RGB")
+    input_tensor = transform(img).unsqueeze(0)
+
+    with torch.no_grad():
+        embedding = model(input_tensor).squeeze(0).flatten()
+        normalized_embedding = embedding / torch.norm(embedding)
+    return normalized_embedding.numpy()
+
+
+def build_vector_collection(image_folder, output_file, filename_list_file):
+    """
+    Build and save feature vectors for all images in a folder.
+    Args:
+        image_folder (str): Path to the folder containing images.
+        output_file (str): Path to save the feature matrix.
+        filename_list_file (str): Path to save the list of filenames.
+    """
     collection = []
+    filenames = []
     image_files = [
         os.path.join(image_folder, f)
         for f in os.listdir(image_folder)
         if f.lower().endswith(('.png', '.jpg', '.jpeg'))
     ]
 
+    # Extract features from images
     for image_path in image_files:
         try:
-            feature_vector = extract_feature_vector(image_path, base_model)
+            feature_vector = extract_feature_vector(image_path)
             collection.append(feature_vector)
+            filenames.append(os.path.basename(image_path))
         except Exception as e:
             print(f"Error processing {image_path}: {e}")
 
-    return np.array(collection)
+    feature_matrix = np.array(collection)
+    np.save(output_file, feature_matrix)
+    np.save(filename_list_file, filenames)
+    print(f"Feature matrix saved to {output_file}")
+    print(f"Filename list saved to {filename_list_file}")
+
+
+# --------------------------------
+# Visualization and Debugging
+# --------------------------------
+
+def visualize_embeddings(collection, filenames):
+    """
+    Visualize embeddings using t-SNE.
+    Args:
+        collection (np.ndarray): Embedding matrix.
+        filenames (list): List of filenames corresponding to embeddings.
+    """
+    tsne = TSNE(n_components=2, random_state=42)
+    embeddings_2d = tsne.fit_transform(collection)
+
+    plt.figure(figsize=(10, 10))
+    plt.scatter(embeddings_2d[:, 0], embeddings_2d[:, 1], alpha=0.7)
+    plt.title("t-SNE Visualization of Embeddings")
+    plt.show()
+
+
+def show_query_and_neighbors(query_image_path, neighbor_paths):
+    """
+    Visualize query image and its nearest neighbors.
+    Args:
+        query_image_path (str): Path to the query image.
+        neighbor_paths (list): List of paths to nearest neighbor images.
+    """
+    plt.figure(figsize=(10, 5))
+
+    # Query Image
+    plt.subplot(1, len(neighbor_paths) + 1, 1)
+    plt.imshow(Image.open(query_image_path))
+    plt.title("Query")
+    plt.axis("off")
+
+    # Nearest Neighbors
+    for i, neighbor_path in enumerate(neighbor_paths):
+        plt.subplot(1, len(neighbor_paths) + 1, i + 2)
+        plt.imshow(Image.open(neighbor_path))
+        plt.title(f"Neighbor {i+1}")
+        plt.axis("off")
+
+    plt.show()
+
+
+# --------------------------------
+# Main Function
+# --------------------------------
+
+def main():
+    feature_vector_path = "data/imagenette/feature_vector.npy"
+    filenames_path = "data/imagenette/filenames.npy"
+    image_folder = "data/imagenette/images"
+
+    if not os.path.exists(feature_vector_path) or not os.path.exists(filenames_path):
+        build_vector_collection(image_folder, feature_vector_path, filenames_path)
+
+    collection = np.load(feature_vector_path)
+    filenames = np.load(filenames_path)
+
+    print(f"Collection shape: {collection.shape}")
+    print(f"Number of filenames: {len(filenames)}")
+
+    # visualize_embeddings(collection, filenames)
+
+
+    # TESTING
+    db = RTreeKNN(collection[:-15])
+    print("k-NN database built.")
+
+    for i in range(1, 16):
+        query_embedding = collection[-i]
+        query_filename = filenames[-i]
+        results = db.knn_search(query_embedding, k=5)
+
+        neighbor_filenames = [filenames[idx] for idx, _ in results]
+        print(f"Query: {query_filename}")
+        print(f"Nearest Neighbors: {neighbor_filenames}")
+
+        show_query_and_neighbors(os.path.join(image_folder, query_filename),
+                                 [os.path.join(image_folder, fname) for fname in neighbor_filenames])
+
+
+if __name__ == '__main__':
+    main()

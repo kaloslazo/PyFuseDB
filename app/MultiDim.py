@@ -110,24 +110,25 @@ class RTreeKNN:
 
     def range_search(self, query, radius=5):
         np_query = np.array(query)
-        tuple_query = tuple(np_query)
-
-        # bounding box al rededeor de la query, de size = radius
-        bounding_box = tuple(
-            coord - radius if i % 2 == 0 else coord + radius
-            for i, coord in enumerate(tuple_query * 2)
-        )
-
+    
+        # Crear los límites mínimos y máximos para cada dimensión
+        mins = np_query - radius
+        maxs = np_query + radius
+    
+        # Crear el bounding box intercalando mins y maxs
+        bounding_box = tuple(np.concatenate([mins, maxs]))
+    
+        # Obtener candidatos que intersectan con el bounding box
         candidates = list(self.index.intersection(bounding_box))
-
-        # filtrar los candidatos con ed > radius
+    
+        # Filtrar candidatos por distancia exacta
         results = [
             (i, distance_metric(np_query, self.collection[i]))
             for i in candidates
             if distance_metric(np_query, self.collection[i]) <= radius
         ]
-
-        return sorted(results, key = lambda x: x[1])
+    
+        return sorted(results, key=lambda x: x[1])
 
 
 class FaissKNN:

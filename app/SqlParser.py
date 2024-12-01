@@ -1,3 +1,5 @@
+import re
+
 class SqlParser:
     def __init__(self):
         self.query = ""
@@ -50,3 +52,36 @@ class SqlParser:
             like_index = queryLike.index("like")
             like_clause = queryLike[like_index:]
         return like_clause
+    
+    def parseQueryPostgres(self, query):
+        # Convertimos todo a minúsculas y separamos por espacios
+        query = query.lower()
+        parts = query.split()
+
+        # Buscamos las posiciones de los componentes clave
+        select_index = parts.index("select")
+        from_index = parts.index("from")
+        like_index = parts.index("like") if "like" in parts else len(parts)
+
+        # Extraemos los campos que se seleccionan (entre SELECT y FROM)
+        fields = ' '.join(parts[select_index + 1:from_index]).split(',')
+        fields = [field.strip() for field in fields]
+
+        # Extraemos la tabla (entre FROM y LIKE)
+        table = parts[from_index + 1:like_index][0] if from_index + 1 < like_index else None
+
+        # Extraemos el término de LIKE (después de LIKE)
+        like_term = ' '.join(parts[like_index + 1:]) if like_index < len(parts) else None
+
+        # Si like_term no es None, lo separamos por espacios y construimos una consulta con el operador "&"
+        if like_term:
+            tokens = like_term.split()
+            # Unimos los tokens con "&" para que la consulta busque todos los términos juntos
+            like_query = ' & '.join(tokens)
+        else:
+            like_query = ""
+
+        # Construimos la consulta SQL con búsqueda de texto completo
+        sql_query = f"SELECT {', '.join(fields)} FROM {table} WHERE to_tsvector('english', texto_concatenado) @@ to_tsquery('english', '{like_query}')"
+
+        return sql_query

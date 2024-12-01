@@ -1,11 +1,12 @@
 import os
 import numpy as np
 import matplotlib.pyplot as plt
-import pickle
+import joblib
 
 import torch
 import torch.nn as nn
 from torchvision import models, transforms
+from torchvision.models import ResNet50_Weights
 
 from PIL import Image
 from sklearn.decomposition import PCA
@@ -24,7 +25,7 @@ import faiss
 
 feature_vector_path = "data/imagenette/feature_vector.npy"
 reduced_vector_path = "data/imagenette/reduced_vector.npy"
-reducer_path = "data/imagenette/reducer.pkl"
+reducer_path = "data/imagenette/reducer.joblib"
 filenames_path = "data/imagenette/filenames.npy"
 image_folder = "data/imagenette/images"
 
@@ -32,7 +33,7 @@ image_folder = "data/imagenette/images"
 # Model and Preprocessing
 # --------------------------------
 
-base_model = models.resnet50(pretrained=True)
+base_model = models.resnet50(weights=ResNet50_Weights.IMAGENET1K_V1)
 model = nn.Sequential(*list(base_model.children())[:-1]).eval()
 
 transform = transforms.Compose([
@@ -228,8 +229,7 @@ def load_reducer():
     Load dimensionality reducer from file.
     """
     try:
-        with open(reducer_path, "rb") as f:
-            reducer = pickle.load(f)
+        reducer = joblib.load(reducer_path)
         return reducer
     except Exception as e:
         print(f"Error loading dimensionality reducer: {e}")
@@ -296,8 +296,7 @@ def main():
         reducer = UMAP(n_components=128)
         reduced_collection = reduce_collection_dimensionality(collection, reducer)
         np.save(reduced_vector_path, reduced_collection)
-        with open(reducer_path, "wb") as f:
-            pickle.dump(reducer, f)
+        joblib.dump(reducer, reducer_path)
 
 
     print(f"Collection shape: {collection.shape}")

@@ -162,25 +162,38 @@ class DataLoader:
 
     def _check_existing_index_postgres(self):
         try:
+            print("Verificando existencia de la tabla 'songs' en PostgreSQL...")
+            # Check if the table 'songs' exists
             self.cursor.execute(
                 """
                 SELECT EXISTS (
-                    SELECT FROM information_schema.tables
-                    WHERE table_name = 'songs'
+                    SELECT FROM information_schema.tables 
+                    WHERE table_schema = 'public' AND table_name = 'songs'
                 );
                 """
             )
             table_exists = self.cursor.fetchone()[0]
             if not table_exists:
+                print("La tabla 'songs' no existe en la base de datos.")
                 return False
 
+            print("La tabla 'songs' existe. Verificando el número de filas...")
+
+            # Check row count
             self.cursor.execute("SELECT COUNT(*) FROM songs;")
             row_count = self.cursor.fetchone()[0]
-            #print("lens: ", row_count, len(self.data))
-            return row_count == len(self.data)  # Verificar que el número de filas coincida
+
+            if row_count == 0:
+                print("La tabla 'songs' está vacía.")
+                return False
+
+            print(f"La tabla 'songs' contiene {row_count} filas.")
+            return True
+
         except Exception as e:
-            print(f"Error checking existing PostgreSQL index: {e}")
+            print(f"Error al verificar la tabla 'songs': {e}")
             return False
+
 
     def create_postgres_db(self):
         try:
@@ -224,7 +237,6 @@ class DataLoader:
 
     def executeQueryPostgreSQL(self, query, topK=10):
         try:
-            query = self.sqlParser.parseQueryPostgres(query)
             print(f"Ejecutando PostgreSQL query: {query}")
             self.cursor.execute(query)
             results = self.cursor.fetchall()

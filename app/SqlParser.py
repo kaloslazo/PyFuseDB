@@ -6,20 +6,52 @@ class SqlParser:
         print("Parser SQL inicializado.")
 
     def parseQuery(self, query):
+        """Parsea una consulta SQL con soporte para LIKE y LIKETO"""
+        # Convertir a minúsculas para consistencia
         query = query.lower()
         parts = query.split()
-        select_index = parts.index('select')
-        from_index = parts.index('from')
-        like_index = parts.index('like') if 'like' in parts else len(parts)
-        fields = ' '.join(parts[select_index+1:from_index]).split(',')
-        fields = [field.strip() for field in fields]
-        table = parts[from_index+1:like_index][0] if from_index+1 < like_index else None
-        like_term = ' '.join(parts[like_index+1:]) if like_index < len(parts) else None
-        return {
-            'fields': fields,
-            'table': table,
-            'like_term': like_term
-        }
+        
+        try:
+            # Encontrar las partes principales de la consulta
+            select_index = parts.index('select')
+            from_index = parts.index('from')
+            
+            # Buscar LIKE o LIKETO
+            like_index = -1
+            like_term = None
+            
+            for i, part in enumerate(parts):
+                if part in ['like', 'liketo']:
+                    like_index = i
+                    # Extraer el término después de LIKE/LIKETO hasta LIMIT si existe
+                    limit_index = len(parts)
+                    if 'limit' in parts:
+                        limit_index = parts.index('limit')
+                    like_term = ' '.join(parts[like_index + 1:limit_index])
+                    break
+            
+            # Extraer campos
+            fields = ' '.join(parts[select_index + 1:from_index]).split(',')
+            fields = [field.strip() for field in fields]
+            
+            # Extraer tabla
+            table = parts[from_index + 1:like_index] if like_index > -1 else parts[from_index + 1]
+            table = table[0] if isinstance(table, list) else table
+            
+            return {
+                'fields': fields,
+                'table': table,
+                'like_term': like_term
+            }
+            
+        except ValueError as e:
+            print(f"Error parseando la consulta: {str(e)}")
+            # Valores por defecto si hay error
+            return {
+                'fields': ['*'],
+                'table': 'songs',
+                'like_term': None
+            }
 
     def selectQuery(self, querySelect):
         attributesForSelect = []

@@ -20,7 +20,7 @@ import faiss
 
 
 # --------------------------------
-# File Paths
+# Files
 # --------------------------------
 
 feature_vector_path = "data/imagenette/feature_vector.npy"
@@ -29,12 +29,30 @@ reducer_path = "data/imagenette/reducer.joblib"
 filenames_path = "data/imagenette/filenames.npy"
 image_folder = "data/imagenette/images"
 
+def load_collection(reduced=False):
+    if reduced:
+        return np.load(reduced_vector_path)
+    else:
+        return np.load(feature_vector_path)
+
+def load_filenames():
+    return np.load(filenames_path)
+
+def load_reducer():
+    try:
+        reducer = joblib.load(reducer_path)
+        return reducer
+    except Exception as e:
+        print(f"Error loading dimensionality reducer: {e}")
+        return None
+
 # --------------------------------
 # Model and Preprocessing
 # --------------------------------
 
 base_model = models.resnet50(weights=ResNet50_Weights.IMAGENET1K_V1)
 model = nn.Sequential(*list(base_model.children())[:-1]).eval()
+print("Loaded ResNet50 Model!")
 
 transform = transforms.Compose([
     transforms.Resize((224, 224)),
@@ -186,11 +204,14 @@ def build_vector_collection(image_folder, output_file, filename_list_file):
     ]
 
     # Extract features from images
-    for image_path in image_files:
+    for i, image_path in enumerate(image_files):
         try:
             feature_vector = extract_feature_vector(image_path)
             collection.append(feature_vector)
             filenames.append(os.path.basename(image_path))
+            if i % 50 == 0:
+                print(f"Vector {i}: shape: {feature_vector.shape}")
+
         except Exception as e:
             print(f"Error processing {image_path}: {e}")
 
@@ -222,18 +243,6 @@ def reduce_query_dimensionality(query_embedding, reducer):
     """
     reduced_embedding = reducer.transform(query_embedding.reshape(-1, 1))
     return reduced_embedding[0]
-
-
-def load_reducer():
-    """
-    Load dimensionality reducer from file.
-    """
-    try:
-        reducer = joblib.load(reducer_path)
-        return reducer
-    except Exception as e:
-        print(f"Error loading dimensionality reducer: {e}")
-        return None
 
 
 # --------------------------------
@@ -289,8 +298,8 @@ def main():
     if not os.path.exists(feature_vector_path) or not os.path.exists(filenames_path):
         build_vector_collection(image_folder, feature_vector_path, filenames_path)
 
-    collection = np.load(feature_vector_path)
-    filenames = np.load(filenames_path)
+    collection = load_collection()
+    filenames = load_filenames()
 
     if not os.path.exists(reduced_vector_path) or not os.path.exists(filenames_path):
         reducer = UMAP(n_components=128)
@@ -304,14 +313,14 @@ def main():
 
     # visualize_embeddings(collection, filenames)
 
-    reduced_collection = np.load(reduced_vector_path)
+    reduced_collection = load_collection(reduced=True)
     reducer = load_reducer()
 
     # TESTING
     db = RTreeKNN(reduced_collection[:-15])
     print("k-NN database built.")
 
-    for i in range(1, 16):
+    for i in range(1, 5):
         query_embedding = collection[-i]
         query_embedding = reduce_query_dimensionality(query_embedding, reducer)
         query_filename = filenames[-i]

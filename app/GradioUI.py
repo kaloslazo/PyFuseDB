@@ -110,12 +110,12 @@ def createDemo(dataLoader=dataLoader, sqlParser=sqlParser):
     def updateResultsMultidim(image_path, retrieval_choice, search_type, search_param, reduce_dimensionality):
         try:
             if retrieval_choice == "RTree" and not reduce_dimensionality:
-                return None, "RTree no soporta embeddings completos.", "Se debe reducir la dimensionalidad."
+                return [], "RTree no soporta embeddings completos.", "Se debe reducir la dimensionalidad."
             elif retrieval_choice == "Faiss (HNSW)" and search_type == "Range Search":
-                return None, "Faiss (HNSW) no soporta búsqueda por Rango.", "Solo soporta KNN."
+                return [], "Faiss (HNSW) no soporta búsqueda por Rango.", "Solo soporta KNN."
 
             if search_param <= 0.0:
-                return None, "Parámetro Inválido.", ""
+                return [], "Parámetro Inválido.", ""
 
             # Feature extraction
             startTime = time.time()
@@ -170,14 +170,14 @@ def createDemo(dataLoader=dataLoader, sqlParser=sqlParser):
             executionTime = time.time() - startTime
 
             if queryResults is None:
-                None, f"Técnica de Búsqueda No Soportada. Tiempo de extracción de embedding: {featureExtractTime:.4f} segunds", f"Tiempo de búsqueda: {executionTime:.4f} segundos"
+                [], f"Técnica de Búsqueda No Soportada. Tiempo de extracción de embedding: {featureExtractTime:.4f} segunds", f"Tiempo de búsqueda: {executionTime:.4f} segundos"
 
 
             print(f"Index: {retrieval_choice}, search algorithm: {search_type}")
             print(queryResults)
 
             results = [
-                (f"./data/imagenette/images/{multidim_filenames[idx]}", dist)
+                (f"./data/imagenette/images/{multidim_filenames[idx]}", f"Distancia: {dist:.4f}")
                 for idx, dist in queryResults
             ]
             return results, f"Tiempo de extracción de embedding: {featureExtractTime:.4f} segunds", f"Tiempo de búsqueda: {executionTime:.4f} segundos"
@@ -201,7 +201,7 @@ def createDemo(dataLoader=dataLoader, sqlParser=sqlParser):
                             query_input = gr.Textbox(
                                 lines=3,
                                 label="Consulta SQL",
-                                placeholder="SELECT title, artist, lyrics FROM audios WHERE LIKETO 'amor en tiempos de guerra'",
+                                placeholder="SELECT track_artist,track_name,lyrics FROM songs LIKE love music",
                                 elem_classes="query-input"
                             )
                         with gr.Column(scale=1):
@@ -235,43 +235,40 @@ def createDemo(dataLoader=dataLoader, sqlParser=sqlParser):
                 with gr.Column(scale=1):
                     with gr.Row():
                         with gr.Column(scale=3):
-                            gr.Markdown("## Upload Image")
-                            image_input = gr.Image(type="filepath", label="Upload Image")
-                            gr.Markdown("RTree has to use Reduced Dimensionality. Faiss HNSW does not support range search.")
+                            gr.Markdown("## Imagen de Consulta")
+                            image_input = gr.Image(type="filepath", label="Subir Imagen", height=400)
+                            gr.Markdown("*Nota: RTree requiere usar dimensionalidad reducida. Faiss HNSW no soporta búsqueda por rango.*")
 
                         with gr.Column(scale=1):
-                            gr.Markdown("### Search Configuration")
+                            gr.Markdown("### Configuración de Búsqueda")
 
                             retrieval_model = gr.Dropdown(
-                                label="Search Model",
+                                label="Modelo de Búsqueda",
                                 choices=multidimRetrievalChoices,
                                 value=multidimRetrievalChoices[0]
                             )
 
                             reduce_dimensionality = gr.Checkbox(
-                                label="Reduce Dimensionality",
+                                label="Reducir Dimensionalidad",
                                 value=False,
                             )
 
                             search_type = gr.Dropdown(
-                                label="Search Type",
+                                label="Tipo de Búsqueda",
                                 choices=["KNN", "Range Search"],
                                 value="KNN"
                             )
 
                             arg_value = gr.Number(
-                                label="K / Radius",
+                                label="K / Radio",
                                 value=5,
                                 step=1,
                             )
 
-
-
-                    
                     multidim_search_button = gr.Button("Ejecutar búsqueda", variant="primary")
 
-                    gr.Markdown("### Results")
-                    multidim_results_df = gr.Dataset(label="Results Table", components=["image", "number"], headers=["Image", "Distance"])
+                    gr.Markdown("### Resultados")
+                    multidim_results_gallery = gr.Gallery(label="Imágenes Similares", show_label=True, height=300, columns=5, rows=1)
 
                     feature_extract_time = gr.Markdown()
                     multidim_execution_time = gr.Markdown()
@@ -286,7 +283,7 @@ def createDemo(dataLoader=dataLoader, sqlParser=sqlParser):
             multidim_search_button.click(
                 fn=updateResultsMultidim,
                 inputs=[image_input, retrieval_model, search_type, arg_value, reduce_dimensionality],
-                outputs=[multidim_results_df, feature_extract_time, multidim_execution_time]
+                outputs=[multidim_results_gallery, feature_extract_time, multidim_execution_time]
             )
 
     return demo

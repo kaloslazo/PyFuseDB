@@ -353,11 +353,12 @@ class DataLoader:
                     )
                     self.connection.commit()
 
-                    start = time.time()
+                    
                     queryPostgres = self.sqlParser.parseQueryPostgres(query)
+                    start = time.time()
                     self.cursor.execute(queryPostgres)
-                    results = self.cursor.fetchall()
                     end = time.time()
+                    results = self.cursor.fetchall()
                     time_taken = end - start
                     report_file.write(f"Consulta ejecutada en {time_taken:.2f} segundos en PostgreSQL\n")
                     print(f"Consulta ejecutada en {time_taken:.2f} segundos en PostgreSQL")

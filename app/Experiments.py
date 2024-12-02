@@ -48,7 +48,7 @@ rtree_range_times = [0.0007, 0.0016, 0.0011, 0.0011]
 plt.figure(figsize=(12, 6))
 plt.plot(N, sequential_times, marker='o', label='Sequential')
 plt.plot(N, rtree_times, marker='o', label='RTree')
-plt.plot(N, faiss_times, marker='o', label='Faiss')
+plt.plot(N, faiss_times, marker='o', label='KNN-HighD')
 plt.title('Tiempos de ejecución vs N')
 plt.xlabel('N')
 plt.ylabel('Tiempo (segundos)')

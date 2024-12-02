@@ -229,8 +229,9 @@ def createDemo(dataLoader=dataLoader, sqlParser=sqlParser):
                 with gr.Column(scale=1):
                     with gr.Row():
                         with gr.Column(scale=3):
-                            gr.Markdown("### Upload Image")
+                            gr.Markdown("## Upload Image")
                             image_input = gr.Image(type="filepath", label="Upload Image")
+                            gr.Markdown("RTree has to use Reduced Dimensionality. Faiss HNSW does not support range search.")
 
                         with gr.Column(scale=1):
                             gr.Markdown("### Search Configuration")
@@ -259,11 +260,12 @@ def createDemo(dataLoader=dataLoader, sqlParser=sqlParser):
                             )
 
 
+
                     
                     multidim_search_button = gr.Button("Ejecutar búsqueda", variant="primary")
 
                     gr.Markdown("### Results")
-                    multidim_results_df = gr.Dataset(components=["image", "number"], headers=["Image", "Distance"])
+                    multidim_results_df = gr.Dataset(label="Results Table", components=["image", "number"], headers=["Image", "Distance"])
 
                     feature_extract_time = gr.Markdown()
                     multidim_execution_time = gr.Markdown()

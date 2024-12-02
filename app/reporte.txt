@@ -5,31 +5,31 @@ Consulta ejecutada en 0.00 segundos en el índice invertido
 Consulta ejecutada en 0.00 segundos en PostgreSQL
 >>>>>>>>>>>>>>>>>>>>>>>>>>> Experimento con N=2000
 >>>>>>>>>>>> Indice invertido: 
-Consulta ejecutada en 0.00 segundos en el índice invertido
+Consulta ejecutada en 0.01 segundos en el índice invertido
 >>>>>>>>>>>> PostgreSQL: 
 Consulta ejecutada en 0.00 segundos en PostgreSQL
 >>>>>>>>>>>>>>>>>>>>>>>>>>> Experimento con N=4000
 >>>>>>>>>>>> Indice invertido: 
-Consulta ejecutada en 0.00 segundos en el índice invertido
+Consulta ejecutada en 0.02 segundos en el índice invertido
 >>>>>>>>>>>> PostgreSQL: 
-Consulta ejecutada en 0.00 segundos en PostgreSQL
+Consulta ejecutada en 0.02 segundos en PostgreSQL
 >>>>>>>>>>>>>>>>>>>>>>>>>>> Experimento con N=8000
 >>>>>>>>>>>> Indice invertido: 
 Consulta ejecutada en 0.02 segundos en el índice invertido
 >>>>>>>>>>>> PostgreSQL: 
-Consulta ejecutada en 0.02 segundos en PostgreSQL
+Consulta ejecutada en 0.01 segundos en PostgreSQL
 >>>>>>>>>>>>>>>>>>>>>>>>>>> Experimento con N=16000
 >>>>>>>>>>>> Indice invertido: 
-Consulta ejecutada en 0.04 segundos en el índice invertido
+Consulta ejecutada en 0.10 segundos en el índice invertido
 >>>>>>>>>>>> PostgreSQL: 
-Consulta ejecutada en 0.02 segundos en PostgreSQL
+Consulta ejecutada en 0.01 segundos en PostgreSQL
 >>>>>>>>>>>>>>>>>>>>>>>>>>> Experimento con N=32000
 >>>>>>>>>>>> Indice invertido: 
-Consulta ejecutada en 0.07 segundos en el índice invertido
+Consulta ejecutada en 0.34 segundos en el índice invertido
 >>>>>>>>>>>> PostgreSQL: 
-Consulta ejecutada en 0.07 segundos en PostgreSQL
+Consulta ejecutada en 0.12 segundos en PostgreSQL
 >>>>>>>>>>>>>>>>>>>>>>>>>>> Experimento con N=64000
 >>>>>>>>>>>> Indice invertido: 
-Consulta ejecutada en 0.17 segundos en el índice invertido
+Consulta ejecutada en 0.53 segundos en el índice invertido
 >>>>>>>>>>>> PostgreSQL: 
-Consulta ejecutada en 0.45 segundos en PostgreSQL
+Consulta ejecutada en 0.34 segundos en PostgreSQL

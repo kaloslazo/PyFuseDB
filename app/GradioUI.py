@@ -201,7 +201,7 @@ def createDemo(dataLoader=dataLoader, sqlParser=sqlParser):
                             query_input = gr.Textbox(
                                 lines=3,
                                 label="Consulta SQL",
-                                placeholder="SELECT track_artist,track_name,lyrics FROM songs LIKE love music",
+                                placeholder="SELECT title, artist, lyrics FROM audios WHERE LIKETO 'amor en tiempos de guerra'",
                                 elem_classes="query-input"
                             )
                         with gr.Column(scale=1):

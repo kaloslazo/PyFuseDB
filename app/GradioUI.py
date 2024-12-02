@@ -36,13 +36,19 @@ multidim_collection = load_collection()
 multidim_reduced_collection = load_collection(reduced=True)
 multidim_reducer = load_reducer()
 multidim_filenames = load_filenames()
+print("[1/4] Cargado archivos multidimensionales")
 
 sequential_full = SequentialKNN(multidim_collection)
+print("[2/6] Creada Collecion Full")
 faiss_full = FaissKNN(multidim_collection)
+print("[3/6] Creado Indice Faiss Full")
 
 sequential_red = SequentialKNN(multidim_reduced_collection)
+print("[4/6] Creada Collecion Reducida")
 rtree_red = RTreeKNN(multidim_reduced_collection)
+print("[5/6] Creado Indice RTree Reducido")
 faiss_red = FaissKNN(multidim_reduced_collection)
+print("[6/6] Creado Indice Faiss Reducido")
 
 print("Indices Multidimensionales construidos!...")
 
@@ -70,7 +76,7 @@ def createDemo(dataLoader=dataLoader, sqlParser=sqlParser):
                 fields = list(dataLoader.data.columns)
 
             if not queryResults:
-                empty_df = pd.DataFrame(columns=fields + ['Relevancia (%)'])
+                empty_df = pd.DataFrame(columns=fields + ['Relevancia'])
                 return gr.update(value=empty_df, headers=empty_df.columns), f"No se encontraron resultados. Tiempo: {executionTime:.4f} segundos"
 
             # Eliminar duplicados manteniendo solo la primera ocurrencia con mayor relevancia
@@ -88,7 +94,7 @@ def createDemo(dataLoader=dataLoader, sqlParser=sqlParser):
             unique_results = list(seen_results.values())
             unique_results = unique_results[:int(topK)]
 
-            df = pd.DataFrame(unique_results, columns=fields + ['Relevancia (%)'])
+            df = pd.DataFrame(unique_results, columns=fields + ['Relevancia'])
             print(df.head())
 
             return gr.update(value=df, headers=df.columns.tolist()), f"Tiempo: {executionTime:.4f} segundos"

@@ -414,17 +414,6 @@ class InvertedIndexFinal:
                 if self.doc_norms[doc_id] > 0:
                     scores[doc_id] = scores[doc_id] / (query_norm * self.doc_norms[doc_id])
                 
-        # Normalizar scores al rango 0-100%
-        if scores:
-            max_score = max(scores.values())
-            min_score = min(scores.values())
-            score_range = max_score - min_score
-
-            for doc_id in scores:
-                if score_range > 0:
-                    scores[doc_id] = ((scores[doc_id] - min_score) / score_range) * 100
-                else:
-                    scores[doc_id] = 100 if scores[doc_id] > 0 else 0
         
         results = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:top_k]
         print(f"Encontrados {len(results)} resultados")

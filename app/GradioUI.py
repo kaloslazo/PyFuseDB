@@ -70,12 +70,29 @@ def createDemo(dataLoader=dataLoader, sqlParser=sqlParser):
             if not queryResults:
                 return None, f"No se encontraron resultados. Tiempo: {executionTime:.2f} segundos"
 
-            df = pd.DataFrame(queryResults, columns=fields + ['Relevancia (%)'])
+            # Eliminar duplicados manteniendo solo la primera ocurrencia con mayor relevancia
+            seen_results = {}
+            
+            for result in queryResults:
+                # Usar los primeros n-1 elementos como clave (excluyendo el score)
+                key = tuple(result[:-1])
+                # Remover el símbolo % antes de convertir a float
+                current_score = float(result[-1].rstrip('%'))
+                
+                if key not in seen_results or current_score > float(seen_results[key][-1].rstrip('%')):
+                    seen_results[key] = result
+                    
+            unique_results = list(seen_results.values())
+            unique_results = unique_results[:int(topK)]
+
+            df = pd.DataFrame(unique_results, columns=fields + ['Relevancia (%)'])
             return df, f"Tiempo: {executionTime:.2f} segundos"
+
         except Exception as e:
             print(f"Error: {str(e)}")
             traceback.print_exc()
             raise gr.Error(f"Error: {str(e)}")
+
 
     def updateResultsMultidim(image_path, retrieval_choice, search_type, search_param, reduce_dimensionality):
         try:

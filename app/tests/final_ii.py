@@ -6,41 +6,44 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from InvertedIndexFinal import InvertedIndexFinal
 
 def test_inverted_index():
-    """
-    Suite completa de pruebas para SPIMI
-    """
-    print("\n🔍 === SPIMI Implementation Test Suite === 🔍")
+    """suite completa de pruebas para spimi"""
+    print("\n🔍 === pruebas de implementacion spimi === 🔍")
     
+    # documentos de prueba con variaciones morfologicas y repeticiones
     test_documents = [
-        "The quick brown fox jumps over the lazy dog",
-        "Pack my box with five dozen liquor jugs",
-        "How vexingly quick daft zebras jump",
-        "The five boxing wizards jump quickly",
-        "Sphinx of black quartz judge my vow",
-        "Two driven jocks help fax my big quiz",
+        "The quick brown foxes jump over the lazy dogs",
+        "Pack my boxes with five dozen liquor jugs", 
+        "How vexingly quick daft zebras jumping",
+        "The five boxing wizards jumped quickly",
+        "Sphinx of black quartz judge my vows",
+        "Two driven jocks help fax my big quizzes",
         "Five quacking zephyrs jolt my wax bed",
-        "The jay pig fox zebra and my wolves quack",
+        "The jay pigs foxes zebras and my wolves quack",
         "Quick zephyrs blow vexing daft jim",
-        "Pack my red box with five dozen quality jugs",
-        "Jinxed wizards pluck ivy from my quilt box",
+        "Pack my red boxes with five dozen quality jugs",
+        "Jinxed wizards plucking ivy from my quilt box",
         "How quickly daft jumping zebras vex",
         "Waltz nymph for quick jigs vex bud",
-        "Quick fox jumps nightly above wizard",
-        "Five jumping wizards hex bolty quick"
+        "Quick foxes jumping nightly above wizard",
+        "Five jumping wizards hex bolty quick",
+        "The flowers are blooming in the gardens",
+        "Many flowers bloomed last spring season",
+        "Running dogs chase playing cats daily",
+        "Cats running and dogs playing together",
+        "Birds flying over blooming flower fields"
     ]
     
-    # Usar tamaños más pequeños para forzar múltiples bloques
-    index = InvertedIndexFinal(block_size=100, dict_size=5)
+    index = InvertedIndexFinal(block_size=25, dict_size=5)
     
     try:
-        # Fase 1: Construcción del índice
-        print("\n📝 1. Building Index Phase:")
+        # fase 1: construccion del indice
+        print("\n📝 1. fase de construccion:")
         print("------------------------")
         index.build_index(test_documents)
-        print("✅ Índice construido exitosamente")
+        print("✓ indice construido")
         
-        # Fase 2: Análisis de bloques
-        print("\n📊 2. Block Statistics:")
+        # fase 2: analisis de bloques
+        print("\n📊 2. estadisticas de bloques:")
         print("-------------------")
         total_terms = 0
         for block_path in index.temp_blocks:
@@ -51,32 +54,38 @@ def test_inverted_index():
                         term_len = struct.unpack('I', f.read(4))[0]
                         term = f.read(term_len).decode('utf-8')
                         terms.add(term)
-                        f.seek(12, 1)  # Saltar position y df
+                        f.seek(12, 1)  # saltar position y df
                 except:
                     pass
                 total_terms += len(terms)
-                print(f"📦 Block {os.path.basename(block_path)}: {len(terms)} términos únicos")
-        print(f"📈 Total términos únicos en bloques: {total_terms}")
+                print(f"📦 bloque {os.path.basename(block_path)}: {len(terms)} terminos unicos")
+        print(f"📈 total terminos unicos en bloques: {total_terms}")
         
-        # Fase 3: Merge
-        print("\n🔄 3. Executing Merge Phase:")
+        # fase 3: merge
+        print("\n🔄 3. fase de merge:")
         print("------------------------")
         index.merge_blocks()
-        print("✅ Merge completado exitosamente")
+        print("✓ merge completado")
         
-        # Fase 4: Verificación
-        print("\n🔎 4. Index Verification:")
+        # fase 4: verificacion
+        print("\n🔎 4. verificacion del indice:")
         print("---------------------")
         expected_terms = {
-            'quick': 8,    # Aparece en 8 documentos
-            'jump': 6,     # Aparece en 6 documentos
-            'wizard': 4,   # Aparece en 4 documentos
-            'fox': 3,      # Aparece en 3 documentos
-            'box': 4       # Aparece en 4 documentos
+            'quick': 8,    # quick, quickly, quickly
+            'jump': 6,     # jump, jumping, jumped, jumping, jumping
+            'wizard': 4,   # wizard, wizards, wizards
+            'fox': 3,      # foxes, foxes
+            'box': 4,      # boxes, boxing, box
+            'flower': 3,   # flowers, flower
+            'bloom': 3,    # blooming, bloomed, blooming
+            'run': 2,      # running, running
+            'dog': 3,      # dogs, dogs
+            'cat': 2       # cats, cats
         }
         
         verification_success = True
         with open(os.path.join(index.bin_path, "final_index.bin"), "rb") as f:
+            found_terms = {}
             while True:
                 try:
                     term_len = struct.unpack('I', f.read(4))[0]
@@ -84,36 +93,49 @@ def test_inverted_index():
                     df = struct.unpack('I', f.read(4))[0]
                     
                     if term in expected_terms:
-                        match = df == expected_terms[term]
-                        status = "✅" if match else "❌"
-                        print(f"{status} Término '{term}': encontrado {df} veces (esperado: {expected_terms[term]})")
-                        verification_success = verification_success and match
+                        found_terms[term] = df
+                        if df != expected_terms[term]:
+                            print(f"✗ Error: termino '{term}' encontrado {df} veces pero se esperaban {expected_terms[term]}")
+                            verification_success = False
+                        else:
+                            print(f"✓ termino '{term}': encontrado {df} veces correctamente")
                     
-                    # Saltar postings
+                    # saltar postings
                     for _ in range(df):
-                        f.seek(8, 1)  # Saltar doc_id y freq
+                        f.seek(8, 1)  # saltar doc_id y freq
                 except:
                     break
+
+        # Verificar que se encontraron todos los términos esperados
+        for term in expected_terms:
+            if term not in found_terms:
+                print(f"✗ Error: termino '{term}' no encontrado en el índice")
+                verification_success = False
         
-        print(f"{'✅ Verificación exitosa' if verification_success else '❌ Verificación fallida'}")
+        if verification_success:
+            print("✓ verificacion exitosa: todos los términos coinciden con lo esperado")
+        else:
+            print("✗ verificacion fallida: algunos términos no coinciden con lo esperado")
+            raise Exception("La verificación del índice falló")
     
-        # Fase 5: Búsqueda
-        print("\n🔍 5. Search Phase:")
+        # fase 5: busqueda
+        print("\n🔍 5. fase de busqueda:")
         print("----------------")
-        search_terms = ["quick", "jump", "wizard", "fox", "box"]
+        search_terms = ["quick fox", "jump", "wizard", "fox", "box", "flower", "bloom", "run", "dog", "cat"]
 
         for term in search_terms:
             result = index.search(term)
-            print(f"🔎 Resultados para '{term}': {result}")
+            if not result:
+                print(f"✗ Error: búsqueda de '{term}' no produjo resultados")
 
-        return True
+        return verification_success
         
     except Exception as e:
-        print(f"\n❌ Error en la prueba: {str(e)}")
+        print(f"\n✗ error en la prueba: {str(e)}")
         import traceback
         traceback.print_exc()
         return False
     
 if __name__ == "__main__":
     success = test_inverted_index()
-    print(f"\n{'✅ Todas las pruebas pasaron exitosamente ohhh si me vengo lunes 9 diciembre hotel asturias' if success else '❌ Algunas pruebas fallaron'}")
+    print(f"\n{'✓ pruebas completadas' if success else '✗ pruebas fallidas'}")

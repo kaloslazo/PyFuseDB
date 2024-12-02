@@ -10,10 +10,13 @@ from dotenv import load_dotenv
 import traceback
 import time
 
+from InvertedIndexFinal import InvertedIndexFinal
+
 load_dotenv()
 
 class DataLoader:
     def __init__(self, dataPath, db_name='spotify_songs', user_name=os.getenv("DB_USER"), password=os.getenv("DB_PASSWORD")):
+        """Inicializa el DataLoader con la nueva implementación SPIMI"""
         self.dataPath = dataPath
         self.data = None
         self.db_name = db_name
@@ -21,42 +24,69 @@ class DataLoader:
         self.password = password
         self.connection = None
         self.cursor = None
-        self.index = InvertedIndex(block_size=5000, dict_size=100000)
+        # Cambiamos a la nueva implementación del índice
+        self.index = InvertedIndexFinal(block_size=1000, dict_size=50000)
         self.sqlParser = SqlParser()
 
         print("DataLoader inicializado.")
-        # Conexion a la base de datos de PostgreSQL
         self._initialize_postgres_connection()
 
     def loadData(self):
+        """Carga los datos y construye el índice SPIMI completo"""
         print("Cargando dataset...")
         try:
             self.data = pd.read_csv(self.dataPath)
+            # Eliminar duplicados basados en track_id
+            self.data = self.data.drop_duplicates(subset=['track_id'], keep='first')
             print(f"Dataset cargado exitosamente.\nColumnas: {self.data.columns}\nFilas: {len(self.data)}")
 
-            # Forzar reconstrucción del índice si los documentos han cambiado
-            if self._check_existing_index() and self._verify_index_size():
-                print("Cargando índice existente en memoria...")
-                self._load_existing_index()
-            else:
-                print("Construyendo nuevo índice en memoria...")
-                # Limpiar archivos antiguos
-                self.index.clear_files()
-                self.index.build_index(self.data["texto_concatenado"].astype(str).tolist())
-                print("Índice en memoria construido exitosamente.")
+            # Construir el índice SPIMI
+            print("Construyendo nuevo índice SPIMI...")
+            self._clear_index_files()
+            
+            # Fase 1: Construcción de bloques
+            print("\nFase 1: Construcción de bloques temporales...")
+            self.index.build_index(self.data["texto_concatenado"].astype(str).tolist())
+            
+            # Fase 2: Merge de bloques
+            print("\nFase 2: Fusionando bloques en índice final...")
+            self.index.merge_blocks()
+            print("Índice SPIMI construido y fusionado exitosamente.")
 
-            # Verificar si la base de datos y el índice existen en PostgreSQL
+            # Verificar creación del índice final
+            final_index_path = os.path.join(self.index.bin_path, "final_index.bin")
+            if os.path.exists(final_index_path):
+                size = os.path.getsize(final_index_path)
+                print(f"✓ Índice final creado: {size} bytes")
+            else:
+                raise Exception("Error: No se creó el índice final")
+
+            # Verificar/crear base de datos PostgreSQL
             if not self._check_existing_index_postgres():
-                print("Base de Datos de PostgreSQL y el index no existen. Creando...")
+                print("Base de Datos PostgreSQL no existe. Creando...")
                 self.create_postgres_db()
             else:
-                print("PostgreSQL database and index already exist. Verificado exitosamente.")
+                print("Base de datos PostgreSQL verificada exitosamente.")
 
         except Exception as e:
             print(f"Error durante la carga de datos: {e}")
             print("Stacktrace:")
             print(traceback.format_exc())
+            raise
 
+    def _clear_index_files(self):
+        """Limpia archivos antiguos del índice"""
+        if os.path.exists(self.index.bin_path):
+            for filename in os.listdir(self.index.bin_path):
+                file_path = os.path.join(self.index.bin_path, filename)
+                try:
+                    if os.path.isfile(file_path):
+                        os.remove(file_path)
+                    elif os.path.isdir(file_path):
+                        import shutil
+                        shutil.rmtree(file_path)
+                except Exception as e:
+                    print(f"Error eliminando {file_path}: {e}")
 
     def _verify_index_size(self):
         """Verifica que el índice existente coincida con el número de documentos"""
@@ -96,33 +126,56 @@ class DataLoader:
             self.index.build_index(self.data["texto_concatenado"].astype(str).tolist())
 
     def executeQuery(self, query, topK=10):
+        """Ejecuta consulta usando el índice SPIMI con deduplicación mejorada"""
         print(f"Ejecutando query: {query}\nTop K: {topK}")
 
+        # Mapeo de nombres de campos alternativos
+        field_mapping = {
+            'title': 'track_name',
+            'artist': 'track_artist',
+            'lyrics': 'lyrics',
+            'album': 'track_album_name',
+            'genre': 'playlist_genre'
+        }
+
         parsed_query = self.sqlParser.parseQuery(query)
-        fields = parsed_query['fields']
+        fields = [field_mapping.get(field, field) for field in parsed_query['fields']]
         like_term = parsed_query['like_term']
 
-        if '*' in fields: fields = list(self.data.columns)
+        if '*' in fields:
+            fields = list(self.data.columns)
         print(f"Campos seleccionados: {fields}")
         print(f"Término de búsqueda: {like_term}")
 
-        if like_term: results = self.index.search(like_term, topK)
+        if like_term:
+            raw_results = self.index.search(like_term, topK)  # Ya no multiplicamos por 3
         else:
-            # Si no hay término de búsqueda, devolver los primeros topK resultados
-            results = [(i, 1.0) for i in range(min(topK, len(self.data)))]
+            raw_results = [(i, 1.0) for i in range(min(topK, len(self.data)))]
 
-        if not results:
+        if not raw_results:
             print("No se encontraron resultados.")
             return []
 
+        # Formatear resultados directamente sin deduplicación adicional
         formatted_results = []
-        for doc_id, score in results:
-            row = self.data.iloc[doc_id]
-            row_data = [str(row[field]) if field in self.data.columns else 'N/A' for field in fields]
-            row_data.append(f"{score * 100:.2f}")
-            formatted_results.append(row_data)
+        seen_track_ids = set()
+        
+        for doc_id, score in raw_results:
+            if 0 <= doc_id < len(self.data):
+                row = self.data.iloc[doc_id]
+                track_id = row['track_id']
+                
+                if track_id not in seen_track_ids:
+                    seen_track_ids.add(track_id)
+                    row_data = [str(row[field]) if field in self.data.columns else 'N/A' 
+                            for field in fields]
+                    # Mantener el score como número con dos decimales, sin el símbolo %
+                    row_data.append(f"{score:.2f}")
+                    formatted_results.append(row_data)
+                    
+                    if len(formatted_results) >= topK:
+                        break
 
-        print(f"Resultados formateados: {formatted_results}")
         return formatted_results
 
     def _initialize_postgres_connection(self):
@@ -366,4 +419,3 @@ class DataLoader:
                     error_message = f"Error al ejecutar la consulta en PostgreSQL: {e}"
                     report_file.write(error_message + "\n")
                     print(error_message)
-

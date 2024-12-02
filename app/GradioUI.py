@@ -59,6 +59,8 @@ def createDemo(dataLoader=dataLoader, sqlParser=sqlParser):
             else:
                 raise gr.Error(f"Modelo de búsqueda no soportado: {retrievalModel}")
 
+            print(f"Ejecutando con {retrievalModel}")
+
             executionTime = time.time() - startTime
 
             # Parsea la consulta SQL
@@ -68,7 +70,8 @@ def createDemo(dataLoader=dataLoader, sqlParser=sqlParser):
                 fields = list(dataLoader.data.columns)
 
             if not queryResults:
-                return None, f"No se encontraron resultados. Tiempo: {executionTime:.2f} segundos"
+                empty_df = pd.DataFrame(columns=fields + ['Relevancia (%)'])
+                return gr.update(value=empty_df, headers=empty_df.columns), f"No se encontraron resultados. Tiempo: {executionTime:.4f} segundos"
 
             # Eliminar duplicados manteniendo solo la primera ocurrencia con mayor relevancia
             seen_results = {}
@@ -86,7 +89,11 @@ def createDemo(dataLoader=dataLoader, sqlParser=sqlParser):
             unique_results = unique_results[:int(topK)]
 
             df = pd.DataFrame(unique_results, columns=fields + ['Relevancia (%)'])
-            return df, f"Tiempo: {executionTime:.2f} segundos"
+            print(df.head())
+
+            return gr.update(value=df, headers=df.columns.tolist()), f"Tiempo: {executionTime:.4f} segundos"
+
+
 
         except Exception as e:
             print(f"Error: {str(e)}")
@@ -214,9 +221,7 @@ def createDemo(dataLoader=dataLoader, sqlParser=sqlParser):
                     results_df = gr.Dataframe(
                         headers=None,
                         datatype=["str"],
-                        wrap=True,
-                        overflow_row_behaviour="paginate",
-                        max_rows=10
+                        wrap=True
                     )
                     execution_time = gr.Markdown()
 
@@ -258,10 +263,10 @@ def createDemo(dataLoader=dataLoader, sqlParser=sqlParser):
                     multidim_search_button = gr.Button("Ejecutar búsqueda", variant="primary")
 
                     gr.Markdown("### Results")
-                    results_df = gr.Dataset(components=["image", "number"], headers=["Image", "Distance"])
+                    multidim_results_df = gr.Dataset(components=["image", "number"], headers=["Image", "Distance"])
 
                     feature_extract_time = gr.Markdown()
-                    execution_time = gr.Markdown()
+                    multidim_execution_time = gr.Markdown()
 
 
             search_button.click(
@@ -273,7 +278,7 @@ def createDemo(dataLoader=dataLoader, sqlParser=sqlParser):
             multidim_search_button.click(
                 fn=updateResultsMultidim,
                 inputs=[image_input, retrieval_model, search_type, arg_value, reduce_dimensionality],
-                outputs=[results_df, feature_extract_time, execution_time]
+                outputs=[multidim_results_df, feature_extract_time, multidim_execution_time]
             )
 
     return demo

@@ -2,8 +2,10 @@ import heapq
 import json
 import os
 import struct
+import time
 from TextPreProcess import TextPreProcess
 from collections import defaultdict
+import math
 
 class InvertedIndexFinal:
     """
@@ -18,20 +20,17 @@ class InvertedIndexFinal:
             dict_size (int): tamaño maximo del diccionario en memoria
         """
         # parametros principales
-        self.block_size = block_size
+        self.block_size = block_size 
         self.dict_size = dict_size
         self.doc_count = 0
         
         # estructuras temporales en memoria
         self.current_block = defaultdict(list)  # {term: [(doc_id, freq)]}
-        self.term_positions = {}  # {term: (block_pos, freq)}
         
         # rutas y archivos
-        self.bin_path = os.path.join("app", "data", "bin")
+        self.bin_path = os.path.join("data", "bin")
         self.posting_file = None  # almacena posting lists
         self.term_file = None  # almacena vocabulario
-        self.doc_norms_file = None  # almacena normas de documentos
-        self.term_positions_file = None  # almacena posiciones
         
         # contadores y utilidades
         self.block_counter = 0
@@ -40,24 +39,42 @@ class InvertedIndexFinal:
         # preprocesamiento de texto
         self.preprocessor = TextPreProcess()
         self.preprocessor.loadStopList()
+
+        # tiempo de proceso
+        self.start_time = None
+        self.end_time = None
+
+        # normas de documentos para similitud coseno
+        self.doc_norms = defaultdict(float)
+
+    def _calculate_weight(self, tf, df):
+        """calcula el peso tf-idf de un término"""
+        if tf <= 0 or df <= 0 or self.doc_count <= 0:
+            return 0.0
+        return (1 + math.log10(tf)) * math.log10(self.doc_count / df)
         
     def _initialize_files(self):
-        """inicializa archivos binarios para el indice"""
-        if not os.path.exists(self.bin_path):
-            os.makedirs(self.bin_path)
-            
-        # crear directorio para bloque actual
-        block_path = os.path.join(self.bin_path, f"block_{self.block_counter}")
-        if not os.path.exists(block_path):
-            os.makedirs(block_path)
-            
-        # abrir archivos del bloque
-        self.posting_file = open(os.path.join(block_path, "postings.bin"), "wb+", buffering=8192)
-        self.term_file = open(os.path.join(block_path, "terms.bin"), "wb+", buffering=8192)
+        """Inicializa archivos binarios para el índice"""
+        # Asegurarse que el directorio base existe
+        os.makedirs(self.bin_path, exist_ok=True)
         
-        # abrir archivos finales
-        self.term_positions_file = open(os.path.join(self.bin_path, "term_positions.bin"), "wb+")
-        self.doc_norms_file = open(os.path.join(self.bin_path, "norms.bin"), "wb+")
+        # Crear directorio para bloque actual
+        block_path = os.path.join(self.bin_path, f"block_{self.block_counter}")
+        if os.path.exists(block_path):
+            import shutil
+            shutil.rmtree(block_path)  # Eliminar si existe
+        os.makedirs(block_path)
+        
+        print(f"Creando archivos en: {block_path}")
+        
+        # Abrir archivos del bloque con modo binario explícito
+        posting_path = os.path.join(block_path, "postings.bin")
+        term_path = os.path.join(block_path, "terms.bin")
+        
+        self.posting_file = open(posting_path, "wb+", buffering=8192)
+        self.term_file = open(term_path, "wb+", buffering=8192)
+        
+        print(f"Archivos creados:\n  - {posting_path}\n  - {term_path}")
         
         self.temp_blocks.append(block_path)
        
@@ -76,24 +93,9 @@ class InvertedIndexFinal:
                     print(f"  ✓ {file_name}: {size} bytes")
                 else:
                     print(f"  ✗ {file_name}: no encontrado")
-        
-        # verificar archivos finales
-        print("\n2. archivos finales:")
-        final_files = {
-            "term_positions.bin": self.term_positions_file,
-            "norms.bin": self.doc_norms_file
-        }
-        
-        for name, file in final_files.items():
-            path = os.path.join(self.bin_path, name)
-            if os.path.exists(path):
-                size = os.path.getsize(path)
-                print(f"  ✓ {name}: {size} bytes")
-            else:
-                print(f"  ✗ {name}: no encontrado")
 
         # mostrar muestra de terminos
-        print("\n3. muestra de terminos:")
+        print("\n2. muestra de terminos:")
         for block_path in self.temp_blocks:
             term_file = os.path.join(block_path, "terms.bin")
             posting_file = os.path.join(block_path, "postings.bin")
@@ -155,6 +157,15 @@ class InvertedIndexFinal:
         for term in terms:
             term_frequencies[term] = term_frequencies.get(term, 0) + 1
         
+        # Calcular norma del documento para similitud coseno
+        doc_norm = 0
+        for term, freq in term_frequencies.items():
+            df = len(self.current_block[term]) + 1  # Aproximación de df
+            weight = self._calculate_weight(freq, df)
+            doc_norm += weight * weight
+            
+        self.doc_norms[doc_id] = math.sqrt(doc_norm)
+        
         for term, freq in term_frequencies.items():
             self.current_block[term].append((doc_id, freq))
     
@@ -186,13 +197,6 @@ class InvertedIndexFinal:
         except Exception as e:
             print(f"error leyendo postings en {position}: {str(e)}")
             return []
-            
-    def _write_term_position(self, term, position, freq):
-        """escribe posicion de termino a disco"""
-        term_padded = term.ljust(100).encode('utf-8')
-        self.term_positions_file.write(term_padded)
-        self.term_positions_file.write(struct.pack('Q', position))
-        self.term_positions_file.write(struct.pack('I', freq))
     
     def _write_block(self, block_number):
         """escribe bloque del indice a disco"""
@@ -249,6 +253,7 @@ class InvertedIndexFinal:
         
     def build_index(self, documents):
         """construye indice invertido procesando documentos"""
+        self.start_time = time.time()
         print(f"construyendo indice para {len(documents)} documentos")
         self._initialize_files()
         self.doc_count = len(documents)
@@ -260,15 +265,28 @@ class InvertedIndexFinal:
             
             self._process_document(doc_id, document)
             
-            if len(self.current_block) >= self.dict_size:
+            if len(self.current_block) >= self.block_size:  # Cambiado de dict_size a block_size
                 self._write_block(block_number)
                 block_number += 1
         
         if self.current_block:
             self._write_block(block_number)
             
+        print("\nVerificando archivos creados:")
+        for block_path in self.temp_blocks:
+            print(f"\nBloque: {os.path.basename(block_path)}")
+            for filename in os.listdir(block_path):
+                file_path = os.path.join(block_path, filename)
+                size = os.path.getsize(file_path)
+                print(f"  - {filename}: {size} bytes")
+
+        self.end_time = time.time()
+        total_time = self.end_time - self.start_time
+        print(f"\nTiempo total de construcción del índice: {total_time:.2f} segundos")
+            
     def merge_blocks(self):
         """fusiona bloques con avance correcto de lectura"""
+        self.start_time = time.time()
         print("\niniciando fusion de bloques...")
         
         block_readers = []
@@ -322,38 +340,100 @@ class InvertedIndexFinal:
                 self._write_merged_postings(final_index, current_term, current_postings)
                 terms_merged += 1
         
+        self.end_time = time.time()
+        total_time = self.end_time - self.start_time
         print(f"\nmerge completado: {terms_merged} terminos procesados")
+        print(f"Tiempo total de merge: {total_time:.2f} segundos")
 
-    def search(self, query, top_k=5):
-        """busca en el indice invertido y retorna documentos relevantes"""
+    def search(self, query, top_k=10):
+        """busca en el indice invertido y retorna documentos relevantes usando similitud coseno"""
+        self.start_time = time.time()
+        print(f"\nBuscando: '{query}'")
+        
+        # Preprocesar query
+        terms_dict = self.preprocessor.preprocess_query(query)
+        print(f"Tokens procesados: {terms_dict}")
+        print(f"Términos de búsqueda procesados: {list(terms_dict.keys())}")
+        
+        scores = defaultdict(float)
+        query_weights = {}
+        query_norm = 0
+        
+        # Buscar cada término
         with open(os.path.join(self.bin_path, "final_index.bin"), "rb") as f:
-            term = query.lower()
-            term_bytes = term.encode('utf-8')
-            term_len = len(term_bytes)
-            
-            f.seek(0)
-            while True:
-                try:
-                    term_len_read = struct.unpack('I', f.read(4))[0]
-                    term_read = f.read(term_len_read).decode('utf-8')
-                    df = struct.unpack('I', f.read(4))[0]
-                    
-                    if term_read == term:
-                        postings = []
-                        for _ in range(df):
-                            doc_id, freq = struct.unpack('II', f.read(8))
-                            postings.append((doc_id, freq))
-                        return sorted(postings, key=lambda x: (-x[1], x[0]))
-                    else:
-                        f.seek(df * 8, 1)
-                            
-                except struct.error:
-                    break
-                except Exception as e:
-                    print(f"error en busqueda: {str(e)}")
-                    break
+            for term, tf in terms_dict.items():
+                f.seek(0)
+                term_found = False
                 
-        return []
+                while True:
+                    try:
+                        # Leer término del índice
+                        term_len = struct.unpack('I', f.read(4))[0]
+                        term_read = f.read(term_len).decode('utf-8')
+                        df = struct.unpack('I', f.read(4))[0]
+                        
+                        if term_read == term:
+                            print(f"Término '{term}' encontrado con df={df}")
+                            term_found = True
+                            
+                            # Calcular peso del término en la query
+                            w_tq = self._calculate_weight(tf, df)
+                            query_weights[term] = w_tq
+                            query_norm += w_tq * w_tq
+                            
+                            # Leer postings y calcular scores
+                            for _ in range(df):
+                                doc_id, doc_tf = struct.unpack('II', f.read(8))
+                                w_td = self._calculate_weight(doc_tf, df)
+                                # Acumular producto punto
+                                scores[doc_id] += w_td * w_tq
+                            break
+                        else:
+                            f.seek(df * 8, 1)
+                                
+                    except struct.error:
+                        break
+                    except Exception as e:
+                        print(f"Error en búsqueda: {str(e)}")
+                        break
+                        
+                if not term_found:
+                    print(f"Término '{term}' no encontrado en el índice")
+        
+        if not scores:
+            print("No se encontraron documentos relevantes")
+            self.end_time = time.time()
+            total_time = self.end_time - self.start_time
+            print(f"Tiempo total de búsqueda: {total_time:.2f} segundos")
+            return []
+        
+        # Aplicar similitud coseno: normalizar por las normas de query y documento
+        query_norm = math.sqrt(query_norm)
+        if query_norm > 0:
+            for doc_id in scores:
+                if self.doc_norms[doc_id] > 0:
+                    scores[doc_id] = scores[doc_id] / (query_norm * self.doc_norms[doc_id])
+                
+        # Normalizar scores al rango 0-100%
+        if scores:
+            max_score = max(scores.values())
+            min_score = min(scores.values())
+            score_range = max_score - min_score
+
+            for doc_id in scores:
+                if score_range > 0:
+                    scores[doc_id] = ((scores[doc_id] - min_score) / score_range) * 100
+                else:
+                    scores[doc_id] = 100 if scores[doc_id] > 0 else 0
+        
+        results = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:top_k]
+        print(f"Encontrados {len(results)} resultados")
+        print(f"✓ resultados para '{query}': {results}")
+
+        self.end_time = time.time()
+        total_time = self.end_time - self.start_time
+        print(f"Tiempo total de búsqueda: {total_time:.2f} segundos")
+        return results
 
     class _BlockReader:
         def __init__(self, block_path, base_path):
